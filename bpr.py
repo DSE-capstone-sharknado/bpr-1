@@ -155,6 +155,7 @@ with tf.Graph().as_default(), tf.Session() as session:
                                 )
             user_count += 1
             _auc_sum += _auc
-            auc_mean = _auc_sum / user_count
+            
+        auc_mean = _auc_sum / user_count
         print "test_loss: ", _test_bprloss, "test_auc: ", auc_mean
         print ""
