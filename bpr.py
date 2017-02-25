@@ -23,22 +23,23 @@ def load_data(data_path):
             if auid in users:
               u = users[auid]
             else:
+              user_count+=1 #new user so increment
               users[auid]=user_count
               u = user_count
-              user_count+=1
             
             if asid in items:
               i = items[asid]
             else:
+              item_count+=1 #new i so increment
               items[asid]=item_count
               i=item_count
-              item_count+=1
             
             user_ratings[u].add(i)
             max_u_id = max(u, max_u_id)
             max_i_id = max(i, max_i_id)
     print "max_u_id:", max_u_id
     print "max_i_id:", max_i_id
+    
     return max_u_id, max_i_id, user_ratings
     
 
@@ -108,7 +109,7 @@ def bpr_mf(user_count, item_count, hidden_dim):
         j_b = tf.nn.embedding_lookup(item_b, j)
     
     # MF predict: u_i > u_j
-    x = i_b - j_b + tf.reduce_sum(tf.multiply(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
+    x = i_b - j_b + tf.reduce_sum(tf.mul(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
     
     # AUC for one user:
     # reasonable iff all (u,i,j) pairs are from the same user
@@ -117,9 +118,9 @@ def bpr_mf(user_count, item_count, hidden_dim):
     mf_auc = tf.reduce_mean(tf.to_float(x > 0))
     
     l2_norm = tf.add_n([
-            tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
-            tf.reduce_sum(tf.multiply(i_emb, i_emb)),
-            tf.reduce_sum(tf.multiply(j_emb, j_emb))
+            tf.reduce_sum(tf.mul(u_emb, u_emb)), 
+            tf.reduce_sum(tf.mul(i_emb, i_emb)),
+            tf.reduce_sum(tf.mul(j_emb, j_emb))
         ])
     
     regulation_rate = 0.0001
@@ -154,5 +155,6 @@ with tf.Graph().as_default(), tf.Session() as session:
                                 )
             user_count += 1
             _auc_sum += _auc
-        print "test_loss: ", _test_bprloss, "test_auc: ", _auc_sum/user_count
+            auc_mean = _auc_sum / user_count
+        print "test_loss: ", _test_bprloss, "test_auc: ", auc_mean
         print ""
