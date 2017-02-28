@@ -3,6 +3,9 @@ import tensorflow as tf
 import os
 import random
 from collections import defaultdict
+import os.path
+import subprocess
+import tempfile
 
 def load_data(data_path):
     '''
@@ -43,7 +46,12 @@ def load_data(data_path):
     return max_u_id, max_i_id, user_ratings
     
 
-data_path = os.path.join('data/amzn/', 'clothing_reviews.csv')
+#copy the data file from GS to a temp dir on the VM
+bucket_file = "gs://tf-sharknado-ml/clothing_reviews.csv"
+data_dir = tempfile.mkdtemp()
+subprocess.check_call(['gsutil', '-m', '-q', 'cp', '-r'] + [bucket_file] + [data_dir])
+data_path = os.path.join(data_dir, "clothing_reviews.csv")
+
 user_count, item_count, user_ratings = load_data(data_path)
 
 
@@ -79,36 +87,34 @@ def generate_test_batch(user_ratings, user_ratings_test, item_count):
     '''
     for an user u and an item i rated by u, 
     generate pairs (u,i,j) for all item j which u has't rated
-    it's convenient for computing AUC score for u
+    it's convinent for computing AUC score for u
     '''
-  
-    #time: O(UxI)
-    #space: UxI = 39387*23033~=1B
     for u in user_ratings.keys():
         t = []
         i = user_ratings_test[u]
         for j in xrange(1, item_count+1):
             if not (j in user_ratings[u]):
                 t.append([u, i, j])
-        yield numpy.asarray(t) #returns a batch per user
+        yield numpy.asarray(t)
         
 def bpr_mf(user_count, item_count, hidden_dim):
     u = tf.placeholder(tf.int32, [None])
     i = tf.placeholder(tf.int32, [None])
     j = tf.placeholder(tf.int32, [None])
 
-    user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], 
-                        initializer=tf.random_normal_initializer(0, 0.1))
-    item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], 
+    with tf.device("/cpu:0"):
+        user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], 
                             initializer=tf.random_normal_initializer(0, 0.1))
-    item_b = tf.get_variable("item_b", [item_count+1, 1], 
-                            initializer=tf.constant_initializer(0.0))
-    
-    u_emb = tf.nn.embedding_lookup(user_emb_w, u)
-    i_emb = tf.nn.embedding_lookup(item_emb_w, i)
-    i_b = tf.nn.embedding_lookup(item_b, i)
-    j_emb = tf.nn.embedding_lookup(item_emb_w, j)
-    j_b = tf.nn.embedding_lookup(item_b, j)
+        item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], 
+                                initializer=tf.random_normal_initializer(0, 0.1))
+        item_b = tf.get_variable("item_b", [item_count+1, 1], 
+                                initializer=tf.constant_initializer(0.0))
+        
+        u_emb = tf.nn.embedding_lookup(user_emb_w, u)
+        i_emb = tf.nn.embedding_lookup(item_emb_w, i)
+        i_b = tf.nn.embedding_lookup(item_b, i)
+        j_emb = tf.nn.embedding_lookup(item_emb_w, j)
+        j_b = tf.nn.embedding_lookup(item_b, j)
     
     # MF predict: u_i > u_j
     x = i_b - j_b + tf.reduce_sum(tf.mul(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
@@ -128,7 +134,7 @@ def bpr_mf(user_count, item_count, hidden_dim):
     regulation_rate = 0.0001
     bprloss = regulation_rate * l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(x)))
     
-    train_op = tf.train.GradientDescentOptimizer(0.1).minimize(bprloss)
+    train_op = tf.train.GradientDescentOptimizer(0.01).minimize(bprloss)
     return u, i, j, mf_auc, bprloss, train_op
     
 with tf.Graph().as_default(), tf.Session() as session:
@@ -136,10 +142,8 @@ with tf.Graph().as_default(), tf.Session() as session:
     session.run(tf.initialize_all_variables())
     for epoch in range(1, 11):
         _batch_bprloss = 0
-        for k in range(1, 600): # uniform samples from training set
-            if(k%100==0):
-              print "iteration,batch: ",epoch,k
-            uij = generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size=512)
+        for k in range(1, 5000): # uniform samples from training set
+            uij = generate_train_batch(user_ratings, user_ratings_test, item_count)
 
             _bprloss, _ = session.run([bprloss, train_op], 
                                 feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2]})
@@ -152,9 +156,8 @@ with tf.Graph().as_default(), tf.Session() as session:
         _auc_sum = 0.0
 
         # each batch will return only one user's auc
-        test_samples = generate_test_batch(user_ratings, user_ratings_test, item_count)
-        for t_uij in test_samples:
-            print "."
+        for t_uij in generate_test_batch(user_ratings, user_ratings_test, item_count):
+
             _auc, _test_bprloss = session.run([mf_auc, bprloss],
                                     feed_dict={u:t_uij[:,0], i:t_uij[:,1], j:t_uij[:,2]}
                                 )
@@ -163,10 +166,4 @@ with tf.Graph().as_default(), tf.Session() as session:
             
         auc_mean = _auc_sum / user_count
         print "test_loss: ", _test_bprloss, "test_auc: ", auc_mean
-        print "" 
-        
-#8:15 - 8:25: 1 epoch = 10  min * 10 = 100 min = 1 hour half
-#typical sampling stragegies I see in BPR are for each epoch
-#take n_votes random uij samples, where n_votes=278,677 is the number of obeservatiosn in teh dataset
-#but this impl is doing 5000*512=2,560,000 samples per epoch which is way too much data I think
-#so if I adjust keep batch size 512 constant, k would be 278677/512=544==600
+        print ""

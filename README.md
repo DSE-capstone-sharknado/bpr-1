@@ -5,20 +5,17 @@ BPR implemented in Tensorflow
 Bayesian Personalized Ranking(BPR) is a learning algorithm for collaborative filtering first introduced in: BPR: Bayesian Personalized Ranking from Implicit Feedback. Steffen Rendle, Christoph Freudenthaler, Zeno Gantner and Lars Schmidt-Thieme, Proc. UAI 2009.   
 
 
-gcloud beta ml init-project
+
 
 
 ## Amzn model
 
-JOB_NAME=tfbpr_amzn_v9
-TRAIN_BUCKET=gs://ml-engine-sharknado
-TRAIN_PATH=${TRAIN_BUCKET}/${JOB_NAME}
+Set `staging-bucket` to your GS bucket:
 
-
-gcloud beta ml jobs submit training amzn_gpu_east_1 \
---package-path=trainer \
---module-name=trainer.bpr \
---staging-bucket="${TRAIN_BUCKET}" \
+gcloud beta ml jobs submit training amzn_gpu_east_3 \
+--package-path=amzn \
+--module-name=amzn.bpr \
+--staging-bucket="gs://tf-sharknado-ml" \
 --region=us-east1 \
 --scale-tier=BASIC_GPU
 
