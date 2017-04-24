@@ -33,11 +33,12 @@ def load_data(data_path):
     
 
 #copy the data file from GS to a temp dir on the VM
-bucket_file = "gs://tf-sharknado-ml/ratings.dat"
-data_dir = tempfile.mkdtemp()
-subprocess.check_call(['gsutil', '-m', '-q', 'cp', '-r'] + [bucket_file] + [data_dir])
+# bucket_file = "gs://tf-sharknado-ml/ratings.dat"
+# data_dir = tempfile.mkdtemp()
+# subprocess.check_call(['gsutil', '-m', '-q', 'cp', '-r'] + [bucket_file] + [data_dir])
+#data_path = os.path.join(data_dir, "ratings.dat")
 
-data_path = os.path.join(data_dir, "ratings.dat")
+data_path = os.path.join('data/ml-1m/', 'ratings.dat')
 user_count, item_count, user_ratings = load_data(data_path)
 
 
@@ -88,22 +89,22 @@ def bpr_mf(user_count, item_count, hidden_dim):
     i = tf.placeholder(tf.int32, [None])
     j = tf.placeholder(tf.int32, [None])
 
-    #former CPU block
-    user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], 
-                        initializer=tf.random_normal_initializer(0, 0.1))
-    item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], 
-                            initializer=tf.random_normal_initializer(0, 0.1))
-    item_b = tf.get_variable("item_b", [item_count+1, 1], 
-                            initializer=tf.constant_initializer(0.0))
+    with tf.device("/cpu:0"):
+      user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], 
+                          initializer=tf.random_normal_initializer(0, 0.1))
+      item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], 
+                              initializer=tf.random_normal_initializer(0, 0.1))
+      item_b = tf.get_variable("item_b", [item_count+1, 1], 
+                              initializer=tf.constant_initializer(0.0))
     
-    u_emb = tf.nn.embedding_lookup(user_emb_w, u)
-    i_emb = tf.nn.embedding_lookup(item_emb_w, i)
-    i_b = tf.nn.embedding_lookup(item_b, i)
-    j_emb = tf.nn.embedding_lookup(item_emb_w, j)
-    j_b = tf.nn.embedding_lookup(item_b, j)
+      u_emb = tf.nn.embedding_lookup(user_emb_w, u)
+      i_emb = tf.nn.embedding_lookup(item_emb_w, i)
+      i_b = tf.nn.embedding_lookup(item_b, i)
+      j_emb = tf.nn.embedding_lookup(item_emb_w, j)
+      j_b = tf.nn.embedding_lookup(item_b, j)
     
     # MF predict: u_i > u_j
-    x = i_b - j_b + tf.reduce_sum(tf.mul(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
+    x = i_b - j_b + tf.reduce_sum(tf.multiply(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
     
     # AUC for one user:
     # reasonable iff all (u,i,j) pairs are from the same user
@@ -112,9 +113,9 @@ def bpr_mf(user_count, item_count, hidden_dim):
     mf_auc = tf.reduce_mean(tf.to_float(x > 0))
     
     l2_norm = tf.add_n([
-            tf.reduce_sum(tf.mul(u_emb, u_emb)), 
-            tf.reduce_sum(tf.mul(i_emb, i_emb)),
-            tf.reduce_sum(tf.mul(j_emb, j_emb))
+            tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
+            tf.reduce_sum(tf.multiply(i_emb, i_emb)),
+            tf.reduce_sum(tf.multiply(j_emb, j_emb))
         ])
     
     regulation_rate = 0.0001
@@ -122,14 +123,17 @@ def bpr_mf(user_count, item_count, hidden_dim):
     
     train_op = tf.train.GradientDescentOptimizer(0.01).minimize(bprloss)
     return u, i, j, mf_auc, bprloss, train_op
-    
+
+batches = 5000
 with tf.Graph().as_default(), tf.Session() as session:
+  
     u, i, j, mf_auc, bprloss, train_op = bpr_mf(user_count, item_count, 20)
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
     for epoch in range(1, 11):
         _batch_bprloss = 0
-        for k in range(1, 5000): # uniform samples from training set
-            uij = generate_train_batch(user_ratings, user_ratings_test, item_count)
+        for k in range(1, batches): # uniform samples from training set
+              
+            uij = generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size=512)
 
             _bprloss, _ = session.run([bprloss, train_op], 
                                 feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2]})
