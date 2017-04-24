@@ -4,6 +4,10 @@ BPR implemented in Tensorflow
 
 Bayesian Personalized Ranking(BPR) is a learning algorithm for collaborative filtering first introduced in: BPR: Bayesian Personalized Ranking from Implicit Feedback. Steffen Rendle, Christoph Freudenthaler, Zeno Gantner and Lars Schmidt-Thieme, Proc. UAI 2009.   
 
+## Notes on GPU Applicability
+
+https://github.com/hexiangnan/theano-BPR/issues/2
+
 
 ## Cloud ML Modules
 
@@ -74,4 +78,6 @@ gcloud beta ml jobs submit training amzn_gpu_east_3 \
 --region=us-east1 \
 --scale-tier=BASIC_GPU
 ```
+
+
 
