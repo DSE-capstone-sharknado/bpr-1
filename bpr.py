@@ -134,30 +134,35 @@ def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regula
     user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
     item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
     item_b = tf.get_variable("item_b", [item_count+1, 1], initializer=tf.constant_initializer(0.0))    #item bias
+    user_b = tf.get_variable("user_b", [user_count+1, 1], initializer=tf.constant_initializer(0.0))    #user bias
     
     u_emb = tf.nn.embedding_lookup(user_emb_w, u) #lookup the latent factor for user u
     i_emb = tf.nn.embedding_lookup(item_emb_w, i) #lookup the latent factor fo item i
     i_b = tf.nn.embedding_lookup(item_b, i)       #lookup the bias vector for item i
     j_emb = tf.nn.embedding_lookup(item_emb_w, j) #lookup the latent factor for item j
     j_b = tf.nn.embedding_lookup(item_b, j)       #lookup the bias vector for item js
+    u_b = tf.nn.embedding_lookup(user_b, u)       #lookup bias scalar for user u
     
     # MF predict: u_i > u_j
     # xuij = xui - xuj
-    # xuij = beta_i - beta_j + dot(g_U, g_I) - dot(g_U, g_J)
-    #below is a shortcut to only use 1 dot operation
-    x = i_b - j_b + tf.reduce_sum(tf.multiply(u_emb, (i_emb - j_emb)), 1, keep_dims=True)
+    xui = u_b + i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True)
+    xuj = u_b + j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True)
+    xuij = xui-xuj
     
     # AUC for one user:
     # reasonable iff all (u,i,j) pairs are from the same user
     # 
     # average AUC = mean( auc for each user in test set)
-    mf_auc = tf.reduce_mean(tf.to_float(x > 0))
+    mf_auc = tf.reduce_mean(tf.to_float(xuij > 0))
     
     l2_norm = tf.add_n([
             tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
             tf.reduce_sum(tf.multiply(i_emb, i_emb)),
-            tf.reduce_sum(tf.multiply(j_emb, j_emb))
-            #should reg the item bias term?
+            tf.reduce_sum(tf.multiply(j_emb, j_emb)),
+            #reg for biases
+            tf.reduce_sum(tf.multiply(i_b, i_b)),
+            tf.reduce_sum(tf.multiply(j_b, j_b)),
+            tf.reduce_sum(tf.multiply(u_b, u_b))
         ])
     
 
