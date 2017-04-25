@@ -166,7 +166,7 @@ def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regula
         ])
     
 
-    bprloss = regulation_rate * l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(x))) #BPR loss
+    bprloss = regulation_rate * l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij))) #BPR loss
     
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 400, 0.8, staircase=True)
