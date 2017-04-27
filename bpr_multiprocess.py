@@ -1,3 +1,7 @@
+# this was an experiemet to see see if there was a bottlenech generating the training batches
+# it starts up a process that queues up training batches which the training process consumes.
+# there was no speedup, so therefore there was no bottleneck. 
+
 import numpy
 import tensorflow as tf
 import os
@@ -206,7 +210,7 @@ epochs=15
 K=20
 learning_rate=0.1
 regulation_rate = 0.1
-train_queue = Queue(10)
+train_queue = Queue(50)
 
 
     
@@ -226,9 +230,11 @@ with tf.Graph().as_default(), tf.Session() as session:
         p.start()
         print "process started..."
 
-        bi=0
+        bi=1
         d= train_queue.get(True) #block if queue is empty
         while d:
+            if(bi%(batches/10)==0):
+              print "iteration,batch: ",epoch,bi
             uij = d[0]
             # uij = generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size=batch_size)
 
@@ -236,7 +242,6 @@ with tf.Graph().as_default(), tf.Session() as session:
             _batch_bprloss += _bprloss
             d = train_queue.get(True)
             bi+=1
-            print bi
         
         p.join() #wait till all processes are complete
         print "bpr_loss: ", _batch_bprloss / batches
@@ -274,3 +279,5 @@ with tf.Graph().as_default(), tf.Session() as session:
 
 # run w/o GPU
 # CUDA_VISIBLE_DEVICES="" time python bpr.py
+
+#34 min 0.671134
