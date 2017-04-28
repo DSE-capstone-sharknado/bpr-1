@@ -2,7 +2,6 @@
 
 import tensorflow as tf
 import os
-import lmdb
 import cPickle as pickle
 import numpy
 import random
@@ -74,20 +73,22 @@ user_ratings_test = generate_test(user_ratings)
 
 def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
     # using leave one cv
-    for u in random.sample(test_ratings.keys(), 10):
+    for u in random.sample(test_ratings.keys(), 3000):
         i = test_ratings[u]
         t = []
         ilist = []
         jlist = []
+        count=0
         for j in range(item_count):
+            # find item not in test[u] and train[u]
             if j != test_ratings[u] and not (j in train_ratings[u]):
-                # find item not in test[u] and train[u]
                 try:
                   image_features[i]
                   image_features[j]
                 except KeyError:
                   continue
                   
+                count+=1
                 t.append([u, i, j])
                 ilist.append(image_features[i])
                 jlist.append(image_features[j])
@@ -95,6 +96,9 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         # print numpy.asarray(t).shape
         # print numpy.vstack(tuple(ilist)).shape
         # print numpy.vstack(tuple(jlist)).shape
+        if(len(ilist)==0):
+          print "if count ==0, could not find neg item for user, count: ",count,u
+          continue
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
 
 
@@ -173,7 +177,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     for epoch in range(1, 20):
         print "epoch ", epoch
         _loss_train = 0.0
-        sample_count = 10
+        sample_count = 400
         batch_size = 512
         p = train_data_process(sample_count, batch_size)
         p.start()
@@ -186,6 +190,9 @@ with tf.Graph().as_default(), tf.Session() as session:
         p.join()
         print "train_loss:", _loss_train/sample_count
 
+        if epoch % 10 != 0:
+            continue
+                    
         auc_values=[]
         _loss_test = 0.0
         user_count = 0
