@@ -27,6 +27,7 @@ print "extracted image feature count: ",len(image_features)
 
 
 train_queue = Queue(4)
+test_queue = Queue(4)
 def uniform_sample_batch(train_ratings, item_count, image_features, sample_count=20000, batch_size=512):
     for i in range(sample_count):
         t = []
@@ -56,6 +57,9 @@ def uniform_sample_batch(train_ratings, item_count, image_features, sample_count
 
 def train_data_process(sample_count=20000, batch_size=512):
     p = Process(target=uniform_sample_batch, args=(user_ratings, item_count, image_features, sample_count, batch_size))
+    return p
+def test_data_process(sample_count=20000):
+    p = Process(target=test_batch_generator_by_user, args=(user_ratings, user_ratings_test, item_count, image_features))
     return p
     
 def generate_test(user_ratings):
@@ -99,7 +103,8 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         if(len(ilist)==0):
           print "if count ==0, could not find neg item for user, count: ",count,u
           continue
-        yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
+        test_queue.put((numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))), True )
+    test_queue.put(None)
 
 
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
@@ -181,10 +186,10 @@ with tf.Graph().as_default(), tf.Session() as session:
     
     session.run(tf.global_variables_initializer())
     
-    for epoch in range(1, 20):
+    for epoch in range(1, 21):
         print "epoch ", epoch
         _loss_train = 0.0
-        sample_count = 1
+        sample_count = 400
         batch_size = 512
         p = train_data_process(sample_count, batch_size)
         p.start()
@@ -197,17 +202,23 @@ with tf.Graph().as_default(), tf.Session() as session:
         p.join()
         print "train_loss:", _loss_train/sample_count
 
-        # if epoch % 10 != 0:
-        #     continue
-        #
-        # auc_values=[]
-        # _loss_test = 0.0
-        # user_count = 0
-        # for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_count, image_features):
-        #     user_count += 1
-        #     _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
-        #     _loss_test += _loss
-        #     auc_values.append(_auc)
-        # print "test_loss: ", _loss_test/user_count, " auc: ", numpy.mean(auc_values)
-        # print ""
+        if epoch % 10 != 0:
+            continue
+        
+        p2 = test_data_process(sample_count)
+        p2.start()
+        auc_values=[]
+        _loss_test = 0.0
+        user_count = 0
+        data = test_queue.get(True) #block if queue is empty
+        while data:
+            d, _iv, _jv = data
+            user_count += 1
+            _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
+            _loss_test += _loss
+            auc_values.append(_auc)
+            data = test_queue.get(True)
+        p2.join()
+        print "test_loss: ", _loss_test/user_count, " auc: ", numpy.mean(auc_values)
+        print ""
 
