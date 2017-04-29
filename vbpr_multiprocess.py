@@ -118,35 +118,42 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     iv = tf.placeholder(tf.float32, [None, 4096])
     jv = tf.placeholder(tf.float32, [None, 4096])
     
-
+    #model parameters -- LEARN THESE
+    #latent factors
     user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    user_img_w = tf.get_variable("user_img_w", [user_count+1, hidden_img_dim],initializer=tf.random_normal_initializer(0, 0.1))
     item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    item_b = tf.get_variable("item_b", [item_count+1, 1], initializer=tf.constant_initializer(0.0))
     
-    u_emb = tf.nn.embedding_lookup(user_emb_w, u)
-    u_img = tf.nn.embedding_lookup(user_img_w, u)
-    
-    i_emb = tf.nn.embedding_lookup(item_emb_w, i)
-    i_b = tf.nn.embedding_lookup(item_b, i)
-    j_emb = tf.nn.embedding_lookup(item_emb_w, j)
-    j_b = tf.nn.embedding_lookup(item_b, j)
-    
-
+    #UxD visual factors for users
+    user_img_w = tf.get_variable("user_img_w", [user_count+1, hidden_img_dim],initializer=tf.random_normal_initializer(0, 0.1))
+    #this is E, the embedding matrix
     img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], initializer=tf.random_normal_initializer(0, 0.1))
-                               
-    img_i_j = tf.matmul(iv - jv,  img_emb_w)
+    
+    #biases
+    item_b = tf.get_variable("item_b", [item_count+1, 1], initializer=tf.constant_initializer(0.0))
+    #user bias just cancels out it seems
+    #missing visual bias?
+    
+    #pull out the respective latent factor vectors for a given user u and items i & j
+    u_emb = tf.nn.embedding_lookup(user_emb_w, u)
+    i_emb = tf.nn.embedding_lookup(item_emb_w, i)
+    j_emb = tf.nn.embedding_lookup(item_emb_w, j)
+    #pull out the visual factor, 1 X D for user u
+    u_img = tf.nn.embedding_lookup(user_img_w, u)
+    #get the respective biases for items i & j
+    i_b = tf.nn.embedding_lookup(item_b, i)
+    j_b = tf.nn.embedding_lookup(item_b, j)
 
     # MF predict: u_i > u_j
-    # xui = u_b + i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(user_img_w, img_emb_w), 1, keep_dims=True)
-    # xuj = u_b + j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(user_img_w, jv), 1, keep_dims=True)
-    # xuij = xui - xuj
-    x = i_b - j_b + tf.reduce_sum(tf.multiply(u_emb, (i_emb - j_emb)), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, img_i_j),1, keep_dims=True)
+    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3
+    theta_j = tf.matmul(jv, img_emb_w) # (f_j * E), eq. 3
+    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True)
+    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True)
+    xuij = xui - xuj
 
     # auc score is used in test/cv
     # reduce_mean is reasonable BECAUSE
     # all test (i, j) pairs of one user is in ONE batch
-    auc = tf.reduce_mean(tf.to_float(x > 0))
+    auc = tf.reduce_mean(tf.to_float(xuij > 0))
 
     l2_norm = tf.add_n([
             tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
@@ -158,7 +165,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
             bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b))
         ])
 
-    loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(x)))
+    loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
     train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
     return u, i, j, iv, jv, loss, auc, train_op
 
@@ -177,7 +184,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     for epoch in range(1, 20):
         print "epoch ", epoch
         _loss_train = 0.0
-        sample_count = 400
+        sample_count = 1
         batch_size = 512
         p = train_data_process(sample_count, batch_size)
         p.start()
@@ -190,17 +197,17 @@ with tf.Graph().as_default(), tf.Session() as session:
         p.join()
         print "train_loss:", _loss_train/sample_count
 
-        if epoch % 10 != 0:
-            continue
-                    
-        auc_values=[]
-        _loss_test = 0.0
-        user_count = 0
-        for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_count, image_features):
-            user_count += 1
-            _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
-            _loss_test += _loss
-            auc_values.append(_auc)
-        print "test_loss: ", _loss_test/user_count, " auc: ", numpy.mean(auc_values)
-        print ""
+        # if epoch % 10 != 0:
+        #     continue
+        #
+        # auc_values=[]
+        # _loss_test = 0.0
+        # user_count = 0
+        # for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_count, image_features):
+        #     user_count += 1
+        #     _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
+        #     _loss_test += _loss
+        #     auc_values.append(_auc)
+        # print "test_loss: ", _loss_test/user_count, " auc: ", numpy.mean(auc_values)
+        # print ""
 
