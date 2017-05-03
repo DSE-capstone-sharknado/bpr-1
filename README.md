@@ -79,5 +79,9 @@ gcloud beta ml jobs submit training amzn_gpu_east_3 \
 --scale-tier=BASIC_GPU
 ```
 
+## Cloud ML
 
+gcloud auth login
+gcloud config set project team-3-165118
+deploy.sh [comment]
 
