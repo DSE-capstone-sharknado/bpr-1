@@ -2,71 +2,7 @@ import numpy
 import tensorflow as tf
 import os
 import random
-from collections import defaultdict
-
-def load_data(data_path):
-    '''
-    As for bpr experiment, all ratings are removed.
-    '''
-    user_ratings = defaultdict(set)
-    max_u_id = -1
-    max_i_id = -1
-    user_min=5
-    user_counts={}
-    user_count=0
-    item_count=0
-    reviews=0
-    users={} #aid to id LUT
-    items={} #asid to id LUT
-    with open(data_path, 'r') as f:
-        for line in f.readlines():
-            reviews+=1
-            auid, asid, _= line.split(",")
-            u, i = None, None
-            
-            if auid in users:
-              u = users[auid]
-            else:
-              user_count+=1 #new user so increment
-              users[auid]=user_count
-              u = user_count
-              user_counts[u]=1
-            
-            if asid in items:
-              i = items[asid]
-            else:
-              item_count+=1 #new i so increment
-              items[asid]=item_count
-              i=item_count
-            
-            user_counts[u] += 1
-            user_ratings[u].add(i)
-            max_u_id = max(u, max_u_id)
-            max_i_id = max(i, max_i_id)
-            
-    print "max_u_id: ", max_u_id
-    print "max_i_id: ", max_i_id
-    print "reviews : ", reviews 
-    
-    # #now filter out users w/ not enough purchase history
-    # filtered_user_ratings=defaultdict(set)
-    # for k,v in user_ratings.iteritems():
-    #   if len(v) >= user_min:
-    #     filtered_user_ratings[k]=v
-    #
-    # print "unfiltered len:",len(user_ratings)
-    # print" filtered len:",len(filtered_user_ratings)
-    
-    #filter out users w/ less than X reviews
-    user_ratings_filtered = defaultdict(set)
-    for u,ids in user_ratings.items():
-      if len(ids)>1:
-        #keep
-        user_ratings_filtered[u]=ids
-    
-    return max_u_id, max_i_id, user_ratings_filtered
-    
-
+from utils import load_data_simple, load_image_features, load_data
 
 
 def generate_test(user_ratings):
@@ -153,7 +89,7 @@ def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regula
     # reasonable iff all (u,i,j) pairs are from the same user
     # 
     # average AUC = mean( auc for each user in test set)
-    mf_auc = tf.reduce_mean(tf.to_float(xuij > 0))
+    mf_auc = tf.reduce_mean(tf.to_float(xuij > 0)) # xui - xui > 0 == xui > xuj
     
     l2_norm = tf.add_n([
             tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
@@ -170,16 +106,18 @@ def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regula
     
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 400, 0.8, staircase=True)
+    #.1 ... .001
                                                
     optimizer = tf.train.GradientDescentOptimizer(learning_rate)
     train_op = optimizer.minimize(bprloss, global_step=global_step)
     return u, i, j, mf_auc, bprloss, train_op
     
 #start
-
-data_path = os.path.join('data/amzn/', 'review_Women.csv')
-# data_path = os.path.join('data/amzn/', 'reviews-women-full.csv')
-user_count, item_count, user_ratings = load_data(data_path)
+data_dir = os.path.join("data", "amzn")
+simple_path = os.path.join(data_dir, 'reviews_Women_5.txt')
+users_lut, items_lut, reviews_count, user_ratings = load_data_simple(simple_path, min_items=5)
+user_count = len(users_lut)
+item_count = len(items_lut)
 
 user_ratings_test = generate_test(user_ratings)
 
@@ -251,3 +189,6 @@ with tf.Graph().as_default(), tf.Session() as session:
 
 # run w/o GPU
 # CUDA_VISIBLE_DEVICES="" time python bpr.py
+#34 min 0.666018
+
+#4:06 - 4:21

@@ -4,6 +4,64 @@ from collections import defaultdict
 import os
 import struct
 
+#returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
+def load_data_simple(path, min_items=5):
+  user_reviews = defaultdict(list)
+  
+
+  with open((path), 'r') as f:
+      for line in f.readlines():
+        auid, asin, _ = line.split(" ", 2)
+        user_reviews[auid].append(asin)
+
+      
+  #filter out by min_items
+  reviews_count=0
+  user_reviews_filtered = defaultdict(list)
+  for auid, asins in user_reviews.iteritems():
+    if len(asins) >= min_items: #keep
+      user_reviews_filtered[auid]=asins
+      reviews_count+=len(asins)
+      
+  
+  #now build auid,asin -> internal id LUT
+  users_lut = {}
+  items_lut = {}
+  user_count=0
+  item_count=0
+  asins_filtered=set()
+  for auid, asins in user_reviews_filtered.iteritems():
+    
+    if auid in users_lut:
+      u = users_lut[auid]
+    else:
+      user_count+=1 #new user so increment
+      users_lut[auid]=user_count
+      u = user_count
+
+    for asin in asins:
+      if asin in items_lut:
+        i = items_lut[asin]
+      else:
+        item_count+=1 #new i so increment
+        items_lut[asin]=item_count
+        i=item_count
+        
+  #now update all the keys to use internal id
+  user_reviews_filtered_keyed=defaultdict(list)
+  for auid, asins in user_reviews_filtered.iteritems():
+    internal_asins = map(lambda asin: items_lut[asin], asins)
+    internal_key = users_lut[auid]
+    user_reviews_filtered_keyed[internal_key] = internal_asins
+    
+  
+      
+  return users_lut, items_lut, reviews_count, user_reviews_filtered_keyed
+      
+        
+        
+        
+
 #load data from amazon reviews dataset csv
 def load_data(data_path):
     user_ratings = defaultdict(set)
@@ -50,7 +108,7 @@ def load_data(data_path):
         #keep
         user_ratings_filtered[u]=ids
     
-    return max_u_id, max_i_id, users, items, user_ratings_filtered
+    return max_u_id, max_i_id, user_ratings_filtered
     
 # TODO add function to seralize output of load_data to a picklefile
 
@@ -80,19 +138,44 @@ def load_image_features(path, items):
   
   
 if __name__ == '__main__':
-  data_path = os.path.join('data', 'amzn', 'review_Women.csv')
-  user_count, item_count, users, items, user_ratings = load_data(data_path)
+  import numpy as np
+  # data_path = os.path.join('data', 'amzn', 'review_Women.csv')
+  # user_count, item_count, users, items, user_ratings = load_data(data_path)
+  #
+  # #items: asin -> iid
+  # print "user count: ",len(users)
+  # print "item count:",len(items)
+  #
+  # images_path = "data/amzn/image_features_Women.b"
+  # image_features = load_image_features(images_path, items)
+  #
+  # print "extracted image feature count: ",len(image_features)
+  #
+  # for asin, iid in items.iteritems():
+  #   # print asin, iid
+  #   image_features[iid]
+  
+  simple_path = os.path.join('data', 'amzn', 'reviews_Women_5.txt')
+  users_lut, items_lut, reviews_count, user_reviews = load_data_simple(simple_path, min_items=1)
+  print len(users_lut),len(items_lut),reviews_count
 
-  #items: asin -> iid
-  print "user count: ",len(users)
-  print "item count:",len(items)
+  counts = []
+  for user, items in user_reviews.iteritems():
+    counts.append(len(items))
+    
+  print np.mean(counts)
+  import collections
+  counter=collections.Counter(counts)
+  print counter
+  
+  print np.mean(counts)
+  print len(counts)
+  
+  
+  
   
   images_path = "data/amzn/image_features_Women.b"
-  image_features = load_image_features(images_path, items)    
-    
-  print "extracted image feature count: ",len(image_features)
-  
-  for asin, iid in items.iteritems():
-    # print asin, iid
-    image_features[iid]
+  image_features = load_image_features(images_path, items_lut)
+  print len(image_features)
+
     
