@@ -3,6 +3,7 @@
 from collections import defaultdict
 import os
 import struct
+import numpy as np
 
 #load data from amazon reviews dataset csv
 def load_data(data_path):
@@ -20,38 +21,95 @@ def load_data(data_path):
             reviews+=1
             auid, asid, _= line.split(",")
             u, i = None, None
-            
+
             if auid in users:
               u = users[auid]
             else:
               user_count+=1 #new user so increment
               users[auid]=user_count
               u = user_count
-            
+
             if asid in items:
               i = items[asid]
             else:
               item_count+=1 #new i so increment
               items[asid]=item_count
               i=item_count
-            
+
             user_ratings[u].add(i)
             max_u_id = max(u, max_u_id)
             max_i_id = max(i, max_i_id)
-            
+
     print "max_u_id: ", max_u_id
     print "max_i_id: ", max_i_id
-    print "reviews : ", reviews 
-    
+    print "reviews : ", reviews
+
     #filter out users w/ less than X reviews
     user_ratings_filtered = defaultdict(set)
     for u,ids in user_ratings.iteritems():
       if len(ids)>1:
         #keep
         user_ratings_filtered[u]=ids
-    
+
     return max_u_id, max_i_id, users, items, user_ratings_filtered
-    
+
+
+# load data from amazon reviews dataset csv
+def load_data_hybrid(data_path):
+    data_path = os.path.join('', 'review_Women.csv')
+    user_ratings = defaultdict(set)
+    max_u_id = -1
+    max_i_id = -1
+    user_min = 5
+    user_count = 0
+    item_count = 0
+    reviews = 0
+    users = {}  # aid to id LUT
+    items = {}  # asid to id LUT
+    brands = {}
+    prices = {}
+    with open(data_path, 'r') as f:
+        for line in f.readlines():
+            reviews += 1
+            try:
+                auid, asid, _, brand, price = line.split(",")
+                u, i = None, None
+            except(ValueError):
+                pass
+
+            if auid in users:
+                u = users[auid]
+            else:
+                user_count += 1  # new user so increment
+                users[auid] = user_count
+                u = user_count
+
+            if asid in items:
+                i = items[asid]
+            else:
+                item_count += 1  # new i so increment
+                items[asid] = item_count
+                i = item_count
+                brands[i] = brand
+                prices[i] = price.rstrip()
+
+            user_ratings[u].add(i)
+            max_u_id = max(u, max_u_id)
+            max_i_id = max(i, max_i_id)
+
+    print "max_u_id: ", max_u_id
+    print "max_i_id: ", max_i_id
+    print "reviews : ", reviews
+
+    # filter out users w/ less than X reviews
+    user_ratings_filtered = defaultdict(set)
+    for u, ids in user_ratings.iteritems():
+        if len(ids) > 1:
+            # keep
+            user_ratings_filtered[u] = ids
+
+    return max_u_id, max_i_id, users, items, user_ratings_filtered, brands, prices
+
 # TODO add function to seralize output of load_data to a picklefile
 
 
