@@ -5,17 +5,19 @@ import os
 import cPickle as pickle
 import numpy
 import random
+import time
 from multiprocessing import Process, Queue
-
-
 import sys
-from utils import load_data, load_image_features
+from utils import load_data, load_image_features, load_data_simple
 
-data_path = os.path.join('data/amzn/', 'review_Women.csv')
-user_count, item_count, users, items, user_ratings = load_data(data_path)
+# data_path = os.path.join('data/amzn/', 'review_Women.csv')
+# user_count, item_count, users, items, user_ratings = load_data(data_path)
 
-#items: asin -> iid
-
+simple_path = os.path.join('data', 'amzn', 'reviews_Women_5.txt')
+users, items, reviews_count, user_ratings = load_data_simple(simple_path, min_items=5)
+user_count = len(users)
+item_count = len(items)
+print user_count,item_count,reviews_count
   
 images_path = "data/amzn/image_features_Women.b"
 image_features = load_image_features(images_path, items)    
@@ -40,13 +42,12 @@ def uniform_sample_batch(train_ratings, item_count, image_features, sample_count
             while j in train_ratings[u]:
                 j = random.randint(0, item_count-1)
             
-            
-            #sometimes there will not be an image for given product
-            try:
+            try: #sometimes there will not be an image for given product
               image_features[i]
               image_features[j]
             except KeyError:
-              continue
+              continue  #skipt this item
+              
             iv.append(image_features[i])
             jv.append(image_features[j])
             t.append([u, i, j])
@@ -86,6 +87,8 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         for j in range(item_count):
             # find item not in test[u] and train[u]
             if j != test_ratings[u] and not (j in train_ratings[u]):
+              
+                #there are a few items w/ no image in the dataset, skip them
                 try:
                   image_features[i]
                   image_features[j]
@@ -96,21 +99,15 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
                 t.append([u, i, j])
                 ilist.append(image_features[i])
                 jlist.append(image_features[j])
-        
-        # print numpy.asarray(t).shape
-        # print numpy.vstack(tuple(ilist)).shape
-        # print numpy.vstack(tuple(jlist)).shape
-        if(len(ilist)==0):
-          print "if count ==0, could not find neg item for user, count: ",count,u
-          continue
+
         test_queue.put((numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))), True )
     test_queue.put(None)
 
 
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
-         learning_rate = 0.001,
-         l2_regulization = 0.01, 
-         bias_regulization=1.0):
+         learning_rate = 0.01,
+         l2_regulization = 0.1, 
+         bias_regulization=0.1):
     """
     user_count: total number of users
     item_count: total number of items
@@ -186,7 +183,10 @@ with tf.Graph().as_default(), tf.Session() as session:
     
     session.run(tf.global_variables_initializer())
     
+    epoch_durations = []
+    eval_durations = []
     for epoch in range(1, 21):
+        epoch_start_time = time.time()
         print "epoch ", epoch
         _loss_train = 0.0
         sample_count = 400
@@ -201,6 +201,11 @@ with tf.Graph().as_default(), tf.Session() as session:
             data = train_queue.get(True)
         p.join()
         print "train_loss:", _loss_train/sample_count
+        
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+        epoch_durations.append(epoch_duration)
+        print "epoch time: ",epoch_duration
 
         if epoch % 10 != 0:
             continue

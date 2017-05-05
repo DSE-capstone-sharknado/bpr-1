@@ -156,7 +156,7 @@ if __name__ == '__main__':
   #   image_features[iid]
   
   simple_path = os.path.join('data', 'amzn', 'reviews_Women_5.txt')
-  users_lut, items_lut, reviews_count, user_reviews = load_data_simple(simple_path, min_items=1)
+  users_lut, items_lut, reviews_count, user_reviews = load_data_simple(simple_path, min_items=5)
   print len(users_lut),len(items_lut),reviews_count
 
   counts = []
@@ -173,9 +173,18 @@ if __name__ == '__main__':
   
   
   
-  
-  images_path = "data/amzn/image_features_Women.b"
-  image_features = load_image_features(images_path, items_lut)
-  print len(image_features)
+  # images_path = "data/amzn/image_features_Women.b"
+  # # images_path = "data/amzn/image_features_Clothing_Shoes_and_Jewelry.b"
+  # image_features = load_image_features(images_path, items_lut)
+  # print len(image_features)
+  #
+  # #a percentage of items in trainset will be missing from images.
+  # count=0
+  # for asin, iid in items_lut.iteritems():
+  #   try:
+  #     image_features[iid]
+  #   except KeyError:
+  #     count+=1
+  # print "Images not found: ",count
 
     
