@@ -85,3 +85,14 @@ gcloud auth login
 gcloud config set project team-3-165118
 deploy.sh [comment]
 
+
+## BPR
+
+Train routine takes about 15-20 min
+.67 AUC
+
+## VBPR
+
+System requirements: Needs 8 Gigs of free memory
+6 hours to train
+AUC .72
