@@ -99,7 +99,9 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
                 t.append([u, i, j])
                 ilist.append(image_features[i])
                 jlist.append(image_features[j])
-
+        
+        if len(ilist)==0: #edge case where no images are found in user test set (bad luck/low probability)
+          continue
         test_queue.put((numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))), True )
     test_queue.put(None)
 
