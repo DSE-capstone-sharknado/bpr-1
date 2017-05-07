@@ -9,17 +9,17 @@ from multiprocessing import Process, Queue
 
 
 import sys
-from utils import load_data, load_image_features
+from utils import load_data_hybrid, load_image_features
 
-data_path = os.path.join('data/amzn/', 'review_Women.csv')
-user_count, item_count, users, items, user_ratings = load_data(data_path)
+data_path = os.path.join('', 'review_Women.csv')
+user_count, item_count, users, items, user_ratings, brands, prices = load_data_hybrid(data_path)
 
 #items: asin -> iid
 
-  
-images_path = "data/amzn/image_features_Women.b"
-image_features = load_image_features(images_path, items)    
-    
+
+images_path = "image_features_Women.b"
+image_features = load_image_features(images_path, items)
+
 print "extracted image feature count: ",len(image_features)
 
 
@@ -39,18 +39,18 @@ def uniform_sample_batch(train_ratings, item_count, image_features, sample_count
             j = random.randint(0, item_count-1)
             while j in train_ratings[u]:
                 j = random.randint(0, item_count-1)
-            
-            
+
+
             #sometimes there will not be an image for given product
             try:
-              image_features[i]
-              image_features[j]
+                image_features[i]
+                image_features[j]
             except KeyError:
-              continue
+                continue
             iv.append(image_features[i])
             jv.append(image_features[j])
             t.append([u, i, j])
-                
+
         # block if queue is full
         train_queue.put( (numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))), True )
     train_queue.put(None)
@@ -61,7 +61,7 @@ def train_data_process(sample_count=20000, batch_size=512):
 def test_data_process(sample_count=20000):
     p = Process(target=test_batch_generator_by_user, args=(user_ratings, user_ratings_test, item_count, image_features))
     return p
-    
+
 def generate_test(user_ratings):
     '''
     for each user, random select one rating into test set
@@ -70,7 +70,7 @@ def generate_test(user_ratings):
     for u, i_list in user_ratings.items():
         user_test[u] = random.sample(user_ratings[u], 1)[0]
     return user_test
-    
+
 
 user_ratings_test = generate_test(user_ratings)
 
@@ -87,16 +87,16 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
             # find item not in test[u] and train[u]
             if j != test_ratings[u] and not (j in train_ratings[u]):
                 try:
-                  image_features[i]
-                  image_features[j]
+                    image_features[i]
+                    image_features[j]
                 except KeyError:
-                  continue
-                  
+                    continue
+
                 count+=1
                 t.append([u, i, j])
                 ilist.append(image_features[i])
                 jlist.append(image_features[j])
-        
+
         # print numpy.asarray(t).shape
         # print numpy.vstack(tuple(ilist)).shape
         # print numpy.vstack(tuple(jlist)).shape
@@ -107,10 +107,10 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
     test_queue.put(None)
 
 
-def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
-         learning_rate = 0.001,
-         l2_regulization = 0.01, 
-         bias_regulization=1.0):
+def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
+         learning_rate = 0.01,
+         l2_regulization = 0.1,
+         bias_regulization=0.1):
     """
     user_count: total number of users
     item_count: total number of items
@@ -122,22 +122,22 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     j = tf.placeholder(tf.int32, [None])
     iv = tf.placeholder(tf.float32, [None, 4096])
     jv = tf.placeholder(tf.float32, [None, 4096])
-    
+
     #model parameters -- LEARN THESE
     #latent factors
     user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
     item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    
+
     #UxD visual factors for users
     user_img_w = tf.get_variable("user_img_w", [user_count+1, hidden_img_dim],initializer=tf.random_normal_initializer(0, 0.1))
     #this is E, the embedding matrix
     img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    
+
     #biases
     item_b = tf.get_variable("item_b", [item_count+1, 1], initializer=tf.constant_initializer(0.0))
     #user bias just cancels out it seems
     #missing visual bias?
-    
+
     #pull out the respective latent factor vectors for a given user u and items i & j
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
     i_emb = tf.nn.embedding_lookup(item_emb_w, i)
@@ -161,7 +161,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     auc = tf.reduce_mean(tf.to_float(xuij > 0))
 
     l2_norm = tf.add_n([
-            tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
+            tf.reduce_sum(tf.multiply(u_emb, u_emb)),
             tf.reduce_sum(tf.multiply(u_img, u_img)),
             tf.reduce_sum(tf.multiply(i_emb, i_emb)),
             tf.reduce_sum(tf.multiply(j_emb, j_emb)),
@@ -183,9 +183,9 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
         u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count)
-    
+
     session.run(tf.global_variables_initializer())
-    
+
     for epoch in range(1, 21):
         print "epoch ", epoch
         _loss_train = 0.0
@@ -204,7 +204,7 @@ with tf.Graph().as_default(), tf.Session() as session:
 
         if epoch % 10 != 0:
             continue
-        
+
         p2 = test_data_process(sample_count)
         p2.start()
         auc_values=[]

@@ -5,6 +5,58 @@ import os
 import struct
 import numpy as np
 
+
+# returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
+def load_data_simple(path, min_items=5):
+    user_reviews = defaultdict(list)
+
+    with open((path), 'r') as f:
+        for line in f.readlines():
+            auid, asin, _ = line.split(" ", 2)
+            user_reviews[auid].append(asin)
+
+    # filter out by min_items
+    reviews_count = 0
+    user_reviews_filtered = defaultdict(list)
+    for auid, asins in user_reviews.iteritems():
+        if len(asins) >= min_items:  # keep
+            user_reviews_filtered[auid] = asins
+            reviews_count += len(asins)
+
+    # now build auid,asin -> internal id LUT
+    users_lut = {}
+    items_lut = {}
+    user_count = 0
+    item_count = 0
+    asins_filtered = set()
+    for auid, asins in user_reviews_filtered.iteritems():
+
+        if auid in users_lut:
+            u = users_lut[auid]
+        else:
+            user_count += 1  # new user so increment
+            users_lut[auid] = user_count
+            u = user_count
+
+        for asin in asins:
+            if asin in items_lut:
+                i = items_lut[asin]
+            else:
+                item_count += 1  # new i so increment
+                items_lut[asin] = item_count
+                i = item_count
+
+    # now update all the keys to use internal id
+    user_reviews_filtered_keyed = defaultdict(list)
+    for auid, asins in user_reviews_filtered.iteritems():
+        internal_asins = map(lambda asin: items_lut[asin], asins)
+        internal_key = users_lut[auid]
+        user_reviews_filtered_keyed[internal_key] = internal_asins
+
+    return users_lut, items_lut, reviews_count, user_reviews_filtered_keyed
+
+
+
 #load data from amazon reviews dataset csv
 def load_data(data_path):
     user_ratings = defaultdict(set)
@@ -69,13 +121,10 @@ def load_data_hybrid(data_path):
     brands = {}
     prices = {}
     with open(data_path, 'r') as f:
-        for line in f.readlines():
+        for line in f.readlines()[1:]:
             reviews += 1
-            try:
-                auid, asid, _, brand, price = line.split(",")
-                u, i = None, None
-            except(ValueError):
-                pass
+            auid, asid, _, brand, price = line.split(",")
+            u, i = None, None
 
             if auid in users:
                 u = users[auid]

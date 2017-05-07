@@ -15,15 +15,15 @@ user_count, item_count, users, items, user_ratings, brands, prices = load_data_h
 # items: asin -> iid
 
 brands_features = {}
+brands_all = list(set(brands.values()))
 for key, value in brands.iteritems():
-    brands_all = list(set(brands.values()))
     brands_vec = numpy.zeros(len(brands_all))
     brands_vec[brands_all.index(value)] = 1
     brands_features[key] = brands_vec
 
 image_features = brands_features
-# images_path = "image_features_Women.b"
-# image_features = load_image_features(images_path, items)
+#images_path = "image_features_Women.b"
+#image_features = load_image_features(images_path, items)
 
 print "extracted image feature count: ", len(image_features)
 
@@ -113,17 +113,17 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
     test_queue.put(None)
 
 
-def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
-         learning_rate=0.001,
-         l2_regulization=0.01,
-         bias_regulization=1.0):
+def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=8,
+         learning_rate=0.01,
+         l2_regulization=0.1,
+         bias_regulization=0.1):
     """
     user_count: total number of users
     item_count: total number of items
     hidden_dim: hidden feature size of MF
     hidden_img_dim: [4096, hidden_img_dim]
     """
-    image_feat_dim = 473
+    image_feat_dim = 541
     u = tf.placeholder(tf.int32, [None])
     i = tf.placeholder(tf.int32, [None])
     j = tf.placeholder(tf.int32, [None])
