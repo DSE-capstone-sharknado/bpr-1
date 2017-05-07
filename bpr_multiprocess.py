@@ -75,11 +75,8 @@ def load_data(data_path):
         #keep
         user_ratings_filtered[u]=ids
     
-    return max_u_id, max_i_id, user_ratings_filtered, prices, brands
+    return max_u_id, max_i_id, user_ratings_filtered, brands, prices
     
-
-
-
 def generate_test(user_ratings):
     '''
     for each user, random select one rating into test set
@@ -119,8 +116,8 @@ def generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size
     train_queue.put(None)
     print "Epoch Training Generation Complete..."
     
-def train_data_process(sample_count=20000, batch_size=512):
-    p = Process(target=generate_train_batch, args=(user_ratings, user_ratings_test, item_count))
+def train_data_process(batch_size=512, batch_count=400):
+    p = Process(target=generate_train_batch, args=(user_ratings, user_ratings_test, item_count, batch_size, batch_count))
     return p
 
 def test_data_process():
@@ -227,7 +224,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     print "training..."
     u, i, j, mf_auc, bprloss, train_op = bpr_mf(user_count, item_count, K, starter_learning_rate=learning_rate, regulation_rate=regulation_rate)
     session.run(tf.global_variables_initializer())
-    
+
     
     for epoch in range(1, epochs+1):
         print "epoch: ", epoch
@@ -242,6 +239,7 @@ with tf.Graph().as_default(), tf.Session() as session:
         while d:
             uij = d[0]
             # uij = generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size=batch_size)
+
             _bprloss, _ = session.run([bprloss, train_op], feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2]})
             _batch_bprloss += _bprloss
             d = train_queue.get(True)
@@ -249,16 +247,17 @@ with tf.Graph().as_default(), tf.Session() as session:
         p.join() #wait till all processes are complete
         print "bpr_loss: ", _batch_bprloss / batches
 
-
+        user_count = 0
+        auc_values=[]
         print "auc..."
         # each batch will return only one user's auc
     
         #these samples need to be generated in parallel
         p2 = test_data_process()
         p2.start()
+        auc_values=[]
         _loss_test = 0.0
         user_count = 0
-        auc_values=[]
         data = test_queue.get(True) #block if queue is empty
         while data:
             d, _iv, _jv = data
@@ -273,3 +272,17 @@ with tf.Graph().as_default(), tf.Session() as session:
     
     summary_writer = tf.summary.FileWriter('log_simple_stats', session.graph)
     summary_writer.close()
+
+#8:15 - 8:25: 1 epoch = 10  min * 10 = 100 min = 1 hour half
+#typical sampling stragegies I see in BPR are for each epoch
+#take n_votes random uij samples, where n_votes=278,677 is the number of obeservatiosn in teh dataset
+#but this impl is doing 5000*512=2,560,000 samples per epoch which is way too much data I think
+#so if I adjust keep batch size 512 constant, k would be 278677/512=544==600
+
+#512/400 - 8:33-8:45 test_auc:  0.554972909522
+#4096/50 - 8:49-9:04 test_auc:  0.513462866851
+
+# run w/o GPU
+# CUDA_VISIBLE_DEVICES="" time python bpr.py
+
+#34 min 0.671134
