@@ -135,6 +135,16 @@ def load_image_features(path, items):
     count+=1
     
   return image_features
+
+import cPickle as pickle
+def load_image_features_from_pickle(path):
+  image_features = pickle.load( open( path, "rb" ) )
+  return image_features
+  
+def load_and_save_image_features(path, items):
+  image_features = load_image_features(path, items)
+  pickle.dump(image_features, open( "women_5_image_features.pkl", "wb" ),  protocol=pickle.HIGHEST_PROTOCOL )
+  return image_features
   
   
 if __name__ == '__main__':
@@ -171,12 +181,14 @@ if __name__ == '__main__':
   print np.mean(counts)
   print len(counts)
   
+
   
   
-  # images_path = "data/amzn/image_features_Women.b"
-  # # images_path = "data/amzn/image_features_Clothing_Shoes_and_Jewelry.b"
-  # image_features = load_image_features(images_path, items_lut)
-  # print len(image_features)
+  images_path = "data/amzn/image_features_Women.b"
+  # images_path = "data/amzn/image_features_Clothing_Shoes_and_Jewelry.b"
+  # image_features = load_image_features(images_path, items_lut) #51 s
+  image_features = load_image_features_from_pickle("data/amzn/women_5_image_features.pkl") #48s
+  print len(image_features)
   #
   # #a percentage of items in trainset will be missing from images.
   # count=0
