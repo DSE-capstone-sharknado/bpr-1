@@ -88,6 +88,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
                                 initializer=tf.random_normal_initializer(0, 0.1))
     item_b = tf.get_variable("item_b", [item_count+1, 1], 
                                 initializer=tf.constant_initializer(0.0))
+    visual_bias = tf.get_variable("visual_bias", [1, 4096], initializer=tf.constant_initializer(0.0))
     
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
     u_img = tf.nn.embedding_lookup(user_img_w, u)
@@ -104,8 +105,8 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     # MF predict: u_i > u_j
     theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3
     theta_j = tf.matmul(jv, img_emb_w) # (f_j * E), eq. 3
-    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True)
-    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True)
+    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
+    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
     xuij = xui - xuj
     #
 
@@ -192,7 +193,7 @@ with tf.Graph().as_default(), tf.Session() as session:
             e=time.time()
             dur=e-s
             dur_sum+=dur
-            print "avg,user: ",dur_sum/user_count,dur #seems like it takes about 10s per user
+            print "avg,user: ",dur_sum/user_count,dur #seems like it takes about 5s per user
         print "test_loss: ", _loss_test/_test_user_count, " auc: ", _auc_all/_test_user_count
         print ""
         
