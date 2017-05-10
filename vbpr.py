@@ -127,6 +127,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
     train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
+    print "Hyper-parameters: K=%d, K2=%d, lr=%f, l2r=%f, br=%f"%(hidden_dim, hidden_img_dim, learning_rate, l2_regulization, bias_regulization)
     return u, i, j, iv, jv, loss, auc, train_op
     
 
@@ -149,14 +150,18 @@ print "extracted image feature count: ",len(image_features)
 
 test_ratings = generate_test(train_ratings)
 
-sample_count = 1600
-batch_size = 128
-epochs =21 # ideally we should not hard code this. GD should terminate when loss converges.
-        
+sample_count = 400
+batch_size = 512
+epochs =21 # ideally we should not hard code this. GD should terminate when loss converges
+K=20
+K2=128
+lr=0.01
+lam=0.1
+lam2=0.1  
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
-        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count)
+        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate = lr, l2_regulization = lam, bias_regulization=lam2)
     
     session.run(tf.global_variables_initializer())
     
