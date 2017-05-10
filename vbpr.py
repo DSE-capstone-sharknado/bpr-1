@@ -179,22 +179,23 @@ with tf.Graph().as_default(), tf.Session() as session:
         if epoch % 20 != 0:
             continue
         
-        _auc_all = 0
-        _loss_test = 0.0
+        auc_values=[]
+        loss_values=[]
         user_count=0
         dur_sum=0
         _test_user_count = len(test_ratings)
         for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
             s = time.time()    
             _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
-            _loss_test += _loss
-            _auc_all += _auc
+            loss_values.append(_loss)
+            auc_values.append(_auc)
             user_count+=1
             e=time.time()
             dur=e-s
             dur_sum+=dur
-            print "avg,user: ",dur_sum/user_count,dur #seems like it takes about 5s per user
-        print "test_loss: ", _loss_test/_test_user_count, " auc: ", _auc_all/_test_user_count
+            print "user ",user_count," auc:",_auc,", loss:",_loss,", avg loss:",np.mean(loss_values),", avg auc:",np.mean(auc_values)
+        print "test_loss: ", np.mean(loss_values), " auc: ", np.mean(auc_values)
         print ""
         
-        
+
+# nohup time python -u vbpr2.py > vbpr2-test001.log 2>&1 &
