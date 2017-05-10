@@ -20,48 +20,62 @@ def generate_test(user_ratings):
     for u, i_list in user_ratings.items():
         user_test[u] = random.sample(user_ratings[u], 1)[0]
     return user_test
-def uniform_sample_batch(train_ratings, item_count, image_features, sample_count=20000, batch_size=5):
-    for i in range(sample_count):
+    
+def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features, sample_count=400, batch_size=512):
+    for i in xrange(sample_count):
         t = []
         iv = []
         jv = []
         for b in xrange(batch_size):
-            u = random.sample(train_ratings.keys(), 1)[0]
+            u = random.sample(train_ratings.keys(), 1)[0] #random user
+            
             i = random.sample(train_ratings[u], 1)[0]
-            j = random.randint(0, item_count-1)
+            while i == test_ratings[u]: #make sure i is not in the test set
+                i = random.sample(train_ratings[u], 1)[0]
+                
+            j = random.randint(0, item_count)
             while j in train_ratings[u]:
-                j = random.randint(0, item_count-1)
-            try: #sometimes there will not be an image for given product
+                j = random.randint(0, item_count)
+                
+            #sometimes there will not be an image for given item i or j
+            try: 
               image_features[i]
               image_features[j]
             except KeyError:
-              continue  #skipt this item
+              continue  #if so, skip this item
+              
             t.append([u, i, j])
             iv.append(image_features[i])
             jv.append(image_features[j])
         yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
 
-def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
+def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000):
     # using leave one cv
-    for u in test_ratings.keys():
-        i = test_ratings[u]
+    for u in random.sample(test_ratings.keys(), sample_size): #uniform random sampling w/o replacement
         t = []
         ilist = []
         jlist = []
+        
+        i = test_ratings[u]
+        #check if we have an image for i, sometimes we dont...
+        if i not in image_features:
+          continue
+        
         for j in range(item_count):
             if j != test_ratings[u] and not (j in train_ratings[u]):
-                # find item not in test[u] and train[u]
-                try: #sometimes there will not be an image for given product
+                # find negative item not in train or test set
+
+                #sometimes there will not be an image for given product
+                try: 
                   image_features[i]
                   image_features[j]
                 except KeyError:
-                  continue  #skipt this item
+                  continue  #if image not found, skip item
                 
                 t.append([u, i, j])
                 ilist.append(image_features[i])
                 jlist.append(image_features[j])
-        if len(ilist)==0: #edge case where no images are found in user test set (bad luck/low probability)
-          continue
+                
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
         
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
@@ -170,8 +184,7 @@ with tf.Graph().as_default(), tf.Session() as session:
         print "epoch ", epoch
         epoch_start_time = time.time()
         _loss_train = 0.0
-
-        for d, _iv, _jv in uniform_sample_batch(train_ratings, item_count, image_features, batch_size=batch_size, sample_count=sample_count):
+        for d, _iv, _jv in uniform_sample_batch(train_ratings, test_ratings, item_count, image_features, sample_count=sample_count, batch_size=batch_size ):
             _loss, _ = session.run([loss, train_op], feed_dict={ u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
             _loss_train += _loss
         print "train_loss:", _loss_train/sample_count
