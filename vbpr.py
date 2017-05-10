@@ -130,13 +130,14 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     auc = tf.reduce_mean(tf.to_float(xuij > 0))
 
     l2_norm = tf.add_n([
-            tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
-            tf.reduce_sum(tf.multiply(u_img, u_img)),
-            tf.reduce_sum(tf.multiply(i_emb, i_emb)),
-            tf.reduce_sum(tf.multiply(j_emb, j_emb)),
-            tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
+            l2_regulization * tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
+            l2_regulization * tf.reduce_sum(tf.multiply(u_img, u_img)),
+            l2_regulization * tf.reduce_sum(tf.multiply(i_emb, i_emb)),
+            l2_regulization * tf.reduce_sum(tf.multiply(j_emb, j_emb)),
+            l2_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
             bias_regulization * tf.reduce_sum(tf.multiply(i_b, i_b)),
-            bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b))
+            bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b)),
+            bias_regulization * tf.reduce_sum(tf.multiply(visual_bias,visual_bias))
         ])
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
@@ -170,12 +171,12 @@ epochs =21 # ideally we should not hard code this. GD should terminate when loss
 K=20
 K2=128
 lr=0.01
-lam=0.1
-lam2=0.1  
+lam=0.01
+lam2=0.01  
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
-        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate = lr, l2_regulization = lam, bias_regulization=lam2)
+        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate =lr, l2_regulization =lam, bias_regulization=lam2)
     
     session.run(tf.global_variables_initializer())
     
