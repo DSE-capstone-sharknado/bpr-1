@@ -100,16 +100,19 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], 
                                initializer=tf.random_normal_initializer(0, 0.1))
 
-    img_i_j = tf.matmul(iv - jv,  img_emb_w)
 
     # MF predict: u_i > u_j
-    x = i_b - j_b + tf.reduce_sum(tf.multiply(u_emb, (i_emb - j_emb)), 1, keep_dims=True) + \
-        tf.reduce_sum(tf.multiply(u_img, img_i_j),1, keep_dims=True)
+    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3
+    theta_j = tf.matmul(jv, img_emb_w) # (f_j * E), eq. 3
+    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True)
+    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True)
+    xuij = xui - xuj
+    #
 
     # auc score is used in test/cv
     # reduce_mean is reasonable BECAUSE
     # all test (i, j) pairs of one user is in ONE batch
-    auc = tf.reduce_mean(tf.to_float(x > 0))
+    auc = tf.reduce_mean(tf.to_float(xuij > 0))
 
     l2_norm = tf.add_n([
             tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
@@ -121,7 +124,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
             bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b))
         ])
 
-    loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(x)))
+    loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
     train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
     return u, i, j, iv, jv, loss, auc, train_op
     
