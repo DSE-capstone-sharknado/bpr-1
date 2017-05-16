@@ -107,12 +107,11 @@ def load_data(data_path):
 
 
 # load data from amazon reviews dataset csv
-def load_data_hybrid(data_path):
-    data_path = os.path.join('', 'review_Women.csv')
+def load_data_hybrid(data_path, min_items=1, min_users=1):
     user_ratings = defaultdict(set)
+    item_ratings = defaultdict(set)
     max_u_id = -1
     max_i_id = -1
-    user_min = 5
     user_count = 0
     item_count = 0
     reviews = 0
@@ -120,10 +119,11 @@ def load_data_hybrid(data_path):
     items = {}  # asid to id LUT
     brands = {}
     prices = {}
+    prod_desc = {}
     with open(data_path, 'r') as f:
         for line in f.readlines()[1:]:
             reviews += 1
-            auid, asid, _, brand, price = line.split(",")
+            auid, asid, _, brand, price, product_desc = line.split(",")
             u, i = None, None
 
             if auid in users:
@@ -140,9 +140,14 @@ def load_data_hybrid(data_path):
                 items[asid] = item_count
                 i = item_count
                 brands[i] = brand
-                prices[i] = price.rstrip()
+                if (price==''):
+                    prices[i] = 0
+                else:
+                    prices[i] = float(price.rstrip())
+                prod_desc[i] = [int(el) for el in list(product_desc)[:-2][1:]]
 
             user_ratings[u].add(i)
+            item_ratings[i].add(u)
             max_u_id = max(u, max_u_id)
             max_i_id = max(i, max_i_id)
 
@@ -151,15 +156,30 @@ def load_data_hybrid(data_path):
     print "reviews : ", reviews
 
     # filter out users w/ less than X reviews
+    num_u_id = 0
+    num_i_id = 0
+    num_reviews = 0
     user_ratings_filtered = defaultdict(set)
     for u, ids in user_ratings.iteritems():
-        if len(ids) > 1:
+        if len(ids) > min_items:
             # keep
             user_ratings_filtered[u] = ids
+            num_u_id += 1
+            num_reviews += len(ids)
+    item_ratings_filtered = defaultdict(set)
+    for ids, u in item_ratings.iteritems():
+        if len(u) > min_users:
+            # keep
+            item_ratings_filtered[ids] = u
+            num_i_id += 1
 
-    return max_u_id, max_i_id, users, items, user_ratings_filtered, brands, prices
 
-# TODO add function to seralize output of load_data to a picklefile
+    print "u_id: ", num_u_id
+    print "i_id: ", num_i_id
+    print "reviews : ", num_reviews
+    return max_u_id, max_i_id, users, items, user_ratings_filtered, item_ratings_filtered, brands, prices, prod_desc
+
+#  TODO add function to seralize output of load_data to a picklefile
 
 
 #load image features for the given asin collection into dictionary
