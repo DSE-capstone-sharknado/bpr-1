@@ -3,6 +3,22 @@
 from collections import defaultdict
 import os
 import struct
+def stats(triples):
+  #frequency distributions
+  user_dist=defaultdict(int)
+  item_dist=defaultdict(int)
+  
+  #cores
+  user_items = defaultdict(list)
+  item_users = defaultdict(list)
+  
+  for u,i in triples:
+     user_dist[u]+=1
+     item_dist[i]+=1
+     user_items[u].append(i)
+     item_users[i].append(u)
+     
+  return user_dist, item_dist, user_items, item_users
 
 def load_simple(path):
   triples =[]
