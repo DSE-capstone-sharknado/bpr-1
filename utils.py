@@ -4,6 +4,38 @@ from collections import defaultdict
 import os
 import struct
 
+def load_simple(path):
+  triples =[]
+  
+  #mappings to amazon ids
+  users = {}
+  items = {}
+  user_count=0
+  item_count=0
+  
+  with open((path), 'r') as f:
+     for line in f.readlines():
+       auid, asin, _ = line.split(" ", 2)
+       
+       if auid in users:
+         u = users[auid]
+       else:
+         user_count+=1 #new user so increment
+         users[auid]=user_count
+         u = user_count
+         
+       if asin in items:
+         i = items[asin]
+       else:
+         item_count+=1 #new user so increment
+         items[asin]=item_count
+         i = item_count
+        
+          
+       triples.append([u, i]) 
+
+  return users, items, np.array(triples)
+  
 #returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
 def load_data_simple(path, min_items=5):
   user_reviews = defaultdict(list)
