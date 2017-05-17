@@ -3,6 +3,8 @@
 from collections import defaultdict
 import os
 import struct
+import numpy as np
+
 def stats(triples):
   #frequency distributions
   user_dist=defaultdict(int)
@@ -19,6 +21,19 @@ def stats(triples):
      item_users[i].append(u)
      
   return user_dist, item_dist, user_items, item_users
+
+#80577 45553 374748
+def ffilter(reviews, item_min=0, user_min=0):
+  #prestats
+  udist, idist, user_items, item_users = stats(reviews)
+  
+  tuples = [] #reduced
+  for u,i in reviews:
+    if udist[u] >= user_min and idist[i] >= item_min:
+      tuples.append([u,i])
+  
+  filtered = np.array(tuples)
+  return filtered
 
 def load_simple(path):
   triples =[]
