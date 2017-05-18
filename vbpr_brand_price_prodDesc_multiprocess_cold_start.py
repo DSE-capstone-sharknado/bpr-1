@@ -18,7 +18,7 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
         for i in train_ratings[u]:
             if (u in test_ratings.keys()):
                 if (i != test_ratings[u]):  # make sure it's not in the test set
-                    for k in range(1,3):
+                    for k in range(1,2):
                         j = random.randint(1, item_count)
                         while j in train_ratings[u]:
                             j = random.randint(1, item_count)
@@ -54,25 +54,34 @@ def generate_test_cold_start(user_ratings, item_ratings):
     '''
     for each user, random select one rating into test set
     '''
+    cold_start_thresh = 10
     user_test = dict()
     for u, i_list in user_ratings.items():
-        for i in i_list:
-            if len(item_ratings[i]) < 50:
-                user_test[u] = i
+        count = 0
+        i = random.sample(user_ratings[u],1)[0]
+        while len(item_ratings[i]) > cold_start_thresh-1:
+            i = random.sample(user_ratings[u], 1)[0]
+            count+=1
+            if count>2*len(user_ratings[u]):
                 break
+        if len(item_ratings[i]) < cold_start_thresh:
+            user_test[u] = i
+        else:
+            continue
     return user_test
 
 
 
 def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
     # using leave one cv
-    for u in random.sample(test_ratings.keys(), 1000):
+    #for u in random.sample(test_ratings.keys(), 1000):
+    for u in test_ratings.keys():
         i = test_ratings[u]
         t = []
         ilist = []
         jlist = []
         count = 0
-        for j in random.sample(range(item_count), 100):
+        for j in random.sample(range(item_count), 10):
             # find item not in test[u] and train[u]
             if j != test_ratings[u] and not (j in train_ratings[u]):
                 try:
@@ -95,11 +104,11 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
 
 
-def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
+def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=2,
          learning_rate=0.005,
          l2_regulization=1,
          bias_regulization=0.1,
-         visual_bias_regulization=20):
+         visual_bias_regulization=1):
     """
     user_count: total number of users
     item_count: total number of items
@@ -127,7 +136,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     img_emb_w = tf.get_variable("image_embedding_weights", [image_feat_dim, hidden_img_dim],
                                 initializer=tf.random_normal_initializer(0, 0.1))
 
-    #visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.constant_initializer(0.0))
+    visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.constant_initializer(0.0))
 
     # biases
     item_b = tf.get_variable("item_b", [item_count + 1, 1], initializer=tf.constant_initializer(0.0))
@@ -148,9 +157,9 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     theta_i = tf.matmul(iv, img_emb_w)  # (f_i * E), eq. 3
     theta_j = tf.matmul(jv, img_emb_w)  # (f_j * E), eq. 3
     xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
+                                                                            + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
     xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
+                                                                            + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
     xuij = xui - xuj
 
     # auc score is used in test/cv
@@ -165,17 +174,17 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
         l2_regulization * tf.reduce_sum(tf.multiply(j_emb, j_emb)),
         l2_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
         bias_regulization * tf.reduce_sum(tf.multiply(i_b, i_b)),
-        bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b))#,
-        #visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias, visual_bias))
+        bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b)),
+        visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias, visual_bias))
     ])
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
     train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
     return u, i, j, iv, jv, loss, auc, train_op
 
-
+random.seed(0)
 data_path = os.path.join('', 'reviews_Women_scraped_cpp_fv.csv')
-user_count, item_count, users, items, user_ratings, item_ratings, brands, prices, prod_desc = load_data_hybrid(data_path, min_items=1, min_users=4)
+user_count, item_count, users, items, user_ratings, item_ratings, brands, prices, prod_desc = load_data_hybrid(data_path, min_items=4, min_users=0, sampling= True, sample_size = 0.3)
 user_ratings_test_cold_start = generate_test_cold_start(user_ratings, item_ratings)
 
 # items: asin -> iid
@@ -215,7 +224,7 @@ with tf.Graph().as_default(), tf.Session() as session:
 
     session.run(tf.global_variables_initializer())
 
-    for epoch in range(1, 8):
+    for epoch in range(1, 15):
         print "epoch ", epoch
         _loss_train = 0.0
         user_count = 0

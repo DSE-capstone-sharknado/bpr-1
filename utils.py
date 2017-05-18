@@ -4,7 +4,7 @@ from collections import defaultdict
 import os
 import struct
 import numpy as np
-
+import random
 
 # returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
 def load_data_simple(path, min_items=5):
@@ -107,7 +107,7 @@ def load_data(data_path):
 
 
 # load data from amazon reviews dataset csv
-def load_data_hybrid(data_path, min_items=1, min_users=1):
+def load_data_hybrid(data_path, min_items=1, min_users=1, sampling= True, sample_size = 0.5):
     user_ratings = defaultdict(set)
     item_ratings = defaultdict(set)
     max_u_id = -1
@@ -120,10 +120,17 @@ def load_data_hybrid(data_path, min_items=1, min_users=1):
     brands = {}
     prices = {}
     prod_desc = {}
+    random.seed(0)
     with open(data_path, 'r') as f:
         for line in f.readlines()[1:]:
+            if (sampling and random.random()>sample_size):
+                continue
             reviews += 1
-            auid, asid, _, brand, price, product_desc = line.split(",")
+            if (len(line.split(","))==6):
+                auid, asid, _, brand, price, product_desc = line.split(",")
+            else:
+                auid, asid, _, brand, price = line.split(",")
+
             u, i = None, None
 
             if auid in users:
@@ -140,11 +147,14 @@ def load_data_hybrid(data_path, min_items=1, min_users=1):
                 items[asid] = item_count
                 i = item_count
                 brands[i] = brand
-                if (price==''):
+                if (price=='' or price=='\r\n' or price=='\n'):
                     prices[i] = 0
                 else:
                     prices[i] = float(price.rstrip())
-                prod_desc[i] = [int(el) for el in list(product_desc)[:-2][1:]]
+                if (len(line.split(",")) == 6):
+                    prod_desc[i] = [int(el) for el in list(product_desc)[:-2][1:]]
+                    if (len(prod_desc[i])==0):
+                        prod_desc[i] = list(np.zeros(4525))
 
             user_ratings[u].add(i)
             item_ratings[i].add(u)
