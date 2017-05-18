@@ -22,51 +22,52 @@ def stats(triples):
      
   return user_dist, item_dist, user_items, item_users
 
-#80577 45553 374748
-def ffilter(reviews, item_min=0, user_min=0):
-  #prestats
-  udist, idist, user_items, item_users = stats(reviews)
-  
-  tuples = [] #reduced
-  for u,i in reviews:
-    if udist[u] >= user_min and idist[i] >= item_min:
-      tuples.append([u,i])
-  
-  filtered = np.array(tuples)
-  return filtered
 
-def load_simple(path):
-  triples =[]
+def load_simple(path, user_min=5):
+  #load raw from disk
+  reviews=[]
+  with open((path), 'r') as f:
+    for line in f.readlines():
+      auid, asin, _ = line.split(" ", 2)
+      reviews.append([auid,asin])
   
-  #mappings to amazon ids
+  #stats
+  user_dist, item_dist, user_ratings, item_users = stats(reviews)
+  
+  #filter out based on distribution of users
+  reviews_reduced=[]
+  for auid, asin in reviews:
+    if user_dist[auid] >=user_min:
+      reviews_reduced.append([auid, asin])
+  
+  #map to sequential ids
   users = {}
   items = {}
   user_count=0
   item_count=0
-  
-  with open((path), 'r') as f:
-     for line in f.readlines():
-       auid, asin, _ = line.split(" ", 2)
-       
-       if auid in users:
-         u = users[auid]
-       else:
-         user_count+=1 #new user so increment
-         users[auid]=user_count
-         u = user_count
-         
-       if asin in items:
-         i = items[asin]
-       else:
-         item_count+=1 #new user so increment
-         items[asin]=item_count
-         i = item_count
-        
-          
-       triples.append([u, i]) 
-
+  triples=[]    
+  for auid, asin in reviews_reduced:
+    if auid in users:
+      u = users[auid]
+    else:
+      user_count+=1 #new user so increment
+      users[auid]=user_count
+      u = user_count
+      
+    if asin in items:
+      i = items[asin]
+    else:
+      item_count+=1 #new user so increment
+      items[asin]=item_count
+      i = item_count
+     
+    triples.append([u, i])
+    
   return users, items, np.array(triples)
   
+
+
+
 #returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
 def load_data_simple(path, min_items=5):
   user_reviews = defaultdict(list)
@@ -93,6 +94,7 @@ def load_data_simple(path, min_items=5):
   user_count=0
   item_count=0
   asins_filtered=set()
+  item_dist=defaultdict(int)
   for auid, asins in user_reviews_filtered.iteritems():
     
     if auid in users_lut:
@@ -109,6 +111,7 @@ def load_data_simple(path, min_items=5):
         item_count+=1 #new i so increment
         items_lut[asin]=item_count
         i=item_count
+      item_dist[i]+=1
         
   #now update all the keys to use internal id
   user_reviews_filtered_keyed=defaultdict(list)
@@ -119,61 +122,8 @@ def load_data_simple(path, min_items=5):
     
   
       
-  return users_lut, items_lut, reviews_count, user_reviews_filtered_keyed
+  return users_lut, items_lut, reviews_count, user_reviews_filtered_keyed, item_dist
       
-        
-        
-        
-
-#load data from amazon reviews dataset csv
-def load_data(data_path):
-    user_ratings = defaultdict(set)
-    max_u_id = -1
-    max_i_id = -1
-    user_min=5
-    user_count=0
-    item_count=0
-    reviews=0
-    users={} #aid to id LUT
-    items={} #asid to id LUT
-    with open(data_path, 'r') as f:
-        for line in f.readlines():
-            reviews+=1
-            auid, asid, _= line.split(",")
-            u, i = None, None
-            
-            if auid in users:
-              u = users[auid]
-            else:
-              user_count+=1 #new user so increment
-              users[auid]=user_count
-              u = user_count
-            
-            if asid in items:
-              i = items[asid]
-            else:
-              item_count+=1 #new i so increment
-              items[asid]=item_count
-              i=item_count
-            
-            user_ratings[u].add(i)
-            max_u_id = max(u, max_u_id)
-            max_i_id = max(i, max_i_id)
-            
-    print "max_u_id: ", max_u_id
-    print "max_i_id: ", max_i_id
-    print "reviews : ", reviews 
-    
-    #filter out users w/ less than X reviews
-    user_ratings_filtered = defaultdict(set)
-    for u,ids in user_ratings.iteritems():
-      if len(ids)>1:
-        #keep
-        user_ratings_filtered[u]=ids
-    
-    return max_u_id, max_i_id, user_ratings_filtered
-    
-# TODO add function to seralize output of load_data to a picklefile
 
 
 #load image features for the given asin collection into dictionary
@@ -211,29 +161,16 @@ def load_and_save_image_features(path, items):
   
   
 if __name__ == '__main__':
-  import numpy as np
-  # data_path = os.path.join('data', 'amzn', 'review_Women.csv')
-  # user_count, item_count, users, items, user_ratings = load_data(data_path)
-  #
-  # #items: asin -> iid
-  # print "user count: ",len(users)
-  # print "item count:",len(items)
-  #
-  # images_path = "data/amzn/image_features_Women.b"
-  # image_features = load_image_features(images_path, items)
-  #
-  # print "extracted image feature count: ",len(image_features)
-  #
-  # for asin, iid in items.iteritems():
-  #   # print asin, iid
-  #   image_features[iid]
   
-  simple_path = os.path.join('data', 'amzn', 'reviews_Women_5.txt')
-  users_lut, items_lut, reviews_count, user_reviews = load_data_simple(simple_path, min_items=5)
-  print len(users_lut),len(items_lut),reviews_count
+  print "loading raw..."
+  simple_path = os.path.join('data', 'amzn', 'reviews_Women.txt')
+  users_lut, items_lut, reviews = load_simple2(simple_path, user_min=5)
+  print "generating stats..."
+  user_dist, item_dist, user_items, item_users = stats(reviews)
+  print len(users_lut),len(items_lut),len(reviews)
 
   counts = []
-  for user, items in user_reviews.iteritems():
+  for user, items in user_items.iteritems():
     counts.append(len(items))
     
   print np.mean(counts)
@@ -247,11 +184,11 @@ if __name__ == '__main__':
 
   
   
-  images_path = "data/amzn/image_features_Women.b"
+  # images_path = "data/amzn/image_features_Women.b"
   # images_path = "data/amzn/image_features_Clothing_Shoes_and_Jewelry.b"
   # image_features = load_image_features(images_path, items_lut) #51 s
-  image_features = load_image_features_from_pickle("data/amzn/women_5_image_features.pkl") #48s
-  print len(image_features)
+  # image_features = load_image_features_from_pickle("data/amzn/women_5_image_features.pkl") #48s
+  # print len(image_features)
   #
   # #a percentage of items in trainset will be missing from images.
   # count=0
