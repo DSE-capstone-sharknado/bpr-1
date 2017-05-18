@@ -2,7 +2,10 @@ import numpy
 import tensorflow as tf
 import os
 import random
-from utils import load_data_simple, load_image_features, load_data
+import time
+import numpy as np
+from utils import load_image_features, load_data_simple, load_simple, stats
+
 
 
 def generate_test(user_ratings):
@@ -22,8 +25,7 @@ def generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size
     '''
     t = []
     for b in xrange(batch_size):
-        u = random.sample(user_ratings.keys(), 1)[0] #random user u
-        
+        u = random.randint(1, len(user_ratings)) #random user u
         i = random.sample(user_ratings[u], 1)[0] #random item i from u
         while i == user_ratings_test[u]: #make sure it's not in the test set
             i = random.sample(user_ratings[u], 1)[0]
@@ -36,7 +38,7 @@ def generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size
     return numpy.asarray(t)
 
 #sample users but not items
-def generate_test_batch(user_ratings, user_ratings_test, item_count, users_size=512):
+def generate_test_batch(user_ratings, user_ratings_test, item_count, item_dist, users_size=512, cold_start=False):
     '''
     for an user u and an item i rated by u, 
     generate pairs (u,i,j) for all item j which u has't rated
@@ -47,15 +49,22 @@ def generate_test_batch(user_ratings, user_ratings_test, item_count, users_size=
     #space: UxI = 39387*23033~=1B
     # print "generating test batch: ",len(user_ratings.keys())*item_count
     
-    
     #emits a batch of rankings for each user
-    for u in random.sample(user_ratings.keys(), users_size):
+    #either iterate all users or sample
+    for u in random.sample(user_ratings, users_size): #uniform random sampling w/o replacement
         t = []
         i = user_ratings_test[u]
+        
+        #filter for cold start
+        if cold_start and item_dist[i] > 5:
+          continue
+          
         for j in range(1, item_count):
             if not (j in user_ratings[u]):
                 t.append([u, i, j])
+
         yield numpy.asarray(t) #returns a batch per user
+        
         
 def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regulation_rate = 0.0001):
   
@@ -112,12 +121,29 @@ def bpr_mf(user_count, item_count, hidden_dim, starter_learning_rate=0.1, regula
     train_op = optimizer.minimize(bprloss, global_step=global_step)
     return u, i, j, mf_auc, bprloss, train_op
     
+    
+
+  
+    
 #start
+print "Loading dataset..."
 data_dir = os.path.join("data", "amzn")
-simple_path = os.path.join(data_dir, 'reviews_Women_5.txt')
-users_lut, items_lut, reviews_count, user_ratings = load_data_simple(simple_path, min_items=5)
-user_count = len(users_lut)
-item_count = len(items_lut)
+simple_path = os.path.join(data_dir, 'reviews_Women.txt')
+
+users, items, reviews_all = load_simple(simple_path, user_min=5)
+print "generating stats..."
+user_dist, item_dist, user_ratings, item_users = stats(reviews_all)
+
+user_count = len(user_ratings)
+item_count = len(item_users)
+reviews_count = len(reviews_all)
+print user_count,item_count,reviews_count
+#83779 302047 711745
+
+
+
+
+
 
 user_ratings_test = generate_test(user_ratings)
 
@@ -127,7 +153,7 @@ batch_size=512
 batches=400
 epochs=15
 K=20
-learning_rate=0.1
+learning_rate=0.9
 regulation_rate = 0.1
 
 
@@ -138,9 +164,10 @@ with tf.Graph().as_default(), tf.Session() as session:
     u, i, j, mf_auc, bprloss, train_op = bpr_mf(user_count, item_count, K, starter_learning_rate=learning_rate, regulation_rate=regulation_rate)
     session.run(tf.global_variables_initializer())
     
-    
+    epoch_durations = []
+    eval_durations = []
     for epoch in range(1, epochs+1):
-      
+        epoch_start_time = time.time()
         #ideally, I want to run the whole dataset each epoch, so adjust batches and batch size accordingly. 
         #Typically batch size will be fixed and a product of teh hardware.
         _batch_bprloss = 0
@@ -153,28 +180,36 @@ with tf.Graph().as_default(), tf.Session() as session:
             _bprloss, _ = session.run([bprloss, train_op], feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2]})
             _batch_bprloss += _bprloss
         
-        print "epoch: ", epoch
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+        epoch_durations.append(epoch_duration)
+        print "epoch, time: ",epoch,epoch_duration
         print "bpr_loss: ", _batch_bprloss / k
 
+        if epoch%15 != 0:
+          continue
+        
         user_count = 0
         auc_values=[]
         print "auc..."
+        eval_start_time = time.time()
         # each batch will return only one user's auc
-    
-        #these samples need to be generated in parallel
-        test_samples = generate_test_batch(user_ratings, user_ratings_test, item_count, users_size=3000)
-        for t_uij in test_samples:
-        
-            #process: t_uij
+        for t_uij in generate_test_batch(user_ratings, user_ratings_test, item_count, item_dist, users_size=18079, cold_start=False):
             user_count += 1
             if user_count % 1000 == 0:
               print "Current AUC mean (%s user samples): %0.5f" % (user_count, numpy.mean(auc_values))
             user_auc = session.run(mf_auc, feed_dict={u:t_uij[:,0], i:t_uij[:,1], j:t_uij[:,2]})
             auc_values.append(user_auc)
-
-        print "test_auc: ", numpy.mean(auc_values)
+            print user_count, user_auc, np.mean(auc_values)
+        eval_end_time = time.time()
+        eval_duration = eval_end_time - eval_start_time
+        eval_durations.append(eval_duration)
+        print "test_auc: ", numpy.mean(auc_values), eval_duration, "user_count: ",user_count
         print ""
     
+    print "epoch durations: ",epoch_durations
+    print "eval durations: ",eval_durations
+    print "epoch & eval avgs: ",np.mean(epoch_durations),np.mean(eval_durations)
     summary_writer = tf.summary.FileWriter('log_simple_stats', session.graph)
     summary_writer.close()
         
