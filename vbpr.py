@@ -1,5 +1,3 @@
-
-
 import tensorflow as tf
 import os
 import cPickle as pickle
@@ -8,7 +6,7 @@ import random
 import time
 import numpy as np
 
-from utils import load_data, load_image_features, load_data_simple
+from utils import load_image_features, load_simple, stats
 
 
 
@@ -27,7 +25,7 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
         iv = []
         jv = []
         for b in xrange(batch_size):
-            u = random.sample(train_ratings.keys(), 1)[0] #random user
+            u = random.randint(1, len(train_ratings))
             
             i = random.sample(train_ratings[u], 1)[0]
             while i == test_ratings[u]: #make sure i is not in the test set
@@ -49,7 +47,7 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
             jv.append(image_features[j])
         yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
 
-def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000):
+def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000, neg_sample_size=1000):
     # using leave one cv
     for u in random.sample(test_ratings.keys(), sample_size): #uniform random sampling w/o replacement
         t = []
@@ -61,7 +59,8 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         if i not in image_features:
           continue
         
-        for j in range(item_count):
+        for _ in xrange(neg_sample_size):
+            j = random.randint(1, item_count)
             if j != test_ratings[u] and not (j in train_ratings[u]):
                 # find negative item not in train or test set
 
@@ -79,9 +78,9 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
         
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
-         learning_rate = 0.001,
-         l2_regulization = 0.01, 
-         bias_regulization=1.0):
+         learning_rate = 0.01,
+         l2_regulization = 0.1, 
+         bias_regulization=0.1):
     """
     user_count: total number of users
     item_count: total number of items
@@ -104,6 +103,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
                                 initializer=tf.constant_initializer(0.0))
     visual_bias = tf.get_variable("visual_bias", [1, 4096], initializer=tf.constant_initializer(0.0))
     
+    #lookup the latent factors by user and id
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
     u_img = tf.nn.embedding_lookup(user_img_w, u)
     
@@ -114,10 +114,10 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     
     img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], 
                                initializer=tf.random_normal_initializer(0, 0.1))
-
+                               
 
     # MF predict: u_i > u_j
-    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3
+    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3 1x4096 x 4086x128 => 1x128 #plot these on 2d scatter
     theta_j = tf.matmul(jv, img_emb_w) # (f_j * E), eq. 3
     xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
     xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
@@ -147,21 +147,28 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     
 
 
-# data_path = os.path.join('data/amzn/', 'review_Women.csv')
-# user_count, item_count, users, items, train_ratings = load_data(data_path)
-simple_path = os.path.join('data', 'amzn', 'reviews_Women_5.txt')
-users, items, reviews_count, train_ratings = load_data_simple(simple_path, min_items=5)
-user_count = len(users)
-item_count = len(items)
+print "Loading dataset..."
+data_dir = os.path.join("data", "amzn")
+simple_path = os.path.join(data_dir, 'reviews_Women.txt')
+
+users, items, reviews_all = load_simple(simple_path, user_min=5)
+print "generating stats..."
+user_dist, item_dist, train_ratings, item_users = stats(reviews_all)
+
+user_count = len(train_ratings)
+item_count = len(item_users)
+reviews_count = len(reviews_all)
 print user_count,item_count,reviews_count
 
-#items: asin -> iid
 
   
 images_path = "data/amzn/image_features_Women.b"
 image_features = load_image_features(images_path, items)    
     
 print "extracted image feature count: ",len(image_features)
+#4096 floats * 24bytes = 98,304 bytes/feature = 98KB
+#4096 * 24 * 302,047 = 29 GB
+
 
 test_ratings = generate_test(train_ratings)
 
@@ -171,8 +178,8 @@ epochs =21 # ideally we should not hard code this. GD should terminate when loss
 K=20
 K2=128
 lr=0.01
-lam=0.01
-lam2=0.01  
+lam=1
+lam2=1 
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
@@ -195,26 +202,18 @@ with tf.Graph().as_default(), tf.Session() as session:
         epoch_durations.append(epoch_duration)
         print "epoch time: ",epoch_duration,", avg: ",np.mean(epoch_durations)
         
-        if epoch % 20 != 0:
-            continue
-        
+
+        print "auc..."
         auc_values=[]
         loss_values=[]
         user_count=0
-        dur_sum=0
-        _test_user_count = len(test_ratings)
-        for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
-            s = time.time()    
+        for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=300):
             _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
             loss_values.append(_loss)
             auc_values.append(_auc)
             user_count+=1
-            e=time.time()
-            dur=e-s
-            dur_sum+=dur
             print "user ",user_count," auc:",_auc,", loss:",_loss,", avg loss:",np.mean(loss_values),", avg auc:",np.mean(auc_values)
-        print "test_loss: ", np.mean(loss_values), " auc: ", np.mean(auc_values)
         print ""
         
 
-# nohup time python -u vbpr2.py > vbpr2-test001.log 2>&1 &
+# nohup time python -u vbpr.py > vbpr2-test001.log 2>&1 &
