@@ -4,11 +4,9 @@ import os
 import cPickle as pickle
 import numpy
 import random
-from multiprocessing import Process, Queue
 
 import sys
 from utils import load_data_hybrid, load_image_features
-
 
 
 def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features):
@@ -17,8 +15,23 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
         iv = []
         jv = []
         for i in train_ratings[u]:
-            if (i != test_ratings[u]):  # make sure it's not in the test set
-                for k in range(1,10):
+            if (u in test_ratings.keys()):
+                if (i != test_ratings[u]):  # make sure it's not in the test set
+                    for k in range(1,2):
+                        j = random.randint(1, item_count)
+                        while j in train_ratings[u]:
+                            j = random.randint(1, item_count)
+                        # sometimes there will not be an image for given product
+                        try:
+                            image_features[i]
+                            image_features[j]
+                        except KeyError:
+                            continue
+                        iv.append(image_features[i])
+                        jv.append(image_features[j])
+                        t.append([u, i, j])
+            else:
+                for k in range(1,5):
                     j = random.randint(1, item_count)
                     while j in train_ratings[u]:
                         j = random.randint(1, item_count)
@@ -33,7 +46,10 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
                     t.append([u, i, j])
 
         # block if queue is full
-        yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
+        if len(iv)>1:
+            yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
+        else:
+            continue
 
 
 def generate_test(user_ratings):
@@ -49,7 +65,8 @@ def generate_test(user_ratings):
 
 def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features):
     # using leave one cv
-    for u in random.sample(test_ratings.keys(), 1000):
+    #for u in random.sample(test_ratings.keys(), 1000):
+    for u in test_ratings.keys():
         i = test_ratings[u]
         t = []
         ilist = []
@@ -80,9 +97,11 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
 
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
          learning_rate=0.005,
-         l2_regulization=1,
+         l2_regulization=0.1,
          bias_regulization=0.1,
-         visual_bias_regulization=20):
+         embed_regulization = 0.007,
+         image_regulization = 0.007,
+         visual_bias_regulization=0.007):
     """
     user_count: total number of users
     item_count: total number of items
@@ -107,10 +126,11 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     user_img_w = tf.get_variable("user_img_w", [user_count + 1, hidden_img_dim],
                                  initializer=tf.random_normal_initializer(0, 0.1))
     # this is E, the embedding matrix
-    img_emb_w = tf.get_variable("image_embedding_weights", [image_feat_dim, hidden_img_dim],
+    img_emb_w = tf.get_variable("img_emb_w", [hidden_img_dim, image_feat_dim],
                                 initializer=tf.random_normal_initializer(0, 0.1))
 
-    #visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.constant_initializer(0.0))
+    visual_b = tf.get_variable("visual_b", [user_count + 1, image_feat_dim], initializer=tf.constant_initializer(0.0))
+    visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.constant_initializer(0.0))
 
     # biases
     item_b = tf.get_variable("item_b", [item_count + 1, 1], initializer=tf.constant_initializer(0.0))
@@ -126,14 +146,19 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     # get the respective biases for items i & j
     i_b = tf.nn.embedding_lookup(item_b, i)
     j_b = tf.nn.embedding_lookup(item_b, j)
+    u_v_b = tf.nn.embedding_lookup(visual_b, u)
+
 
     # MF predict: u_i > u_j
-    theta_i = tf.matmul(iv, img_emb_w)  # (f_i * E), eq. 3
-    theta_j = tf.matmul(jv, img_emb_w)  # (f_j * E), eq. 3
-    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) #+ tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
-    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) #+ tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
+    # MF predict: u_i > u_j
+    theta_i = tf.matmul(iv, img_emb_w, transpose_b=True)  # (f_i * E), eq. 3
+    theta_j = tf.matmul(jv, img_emb_w, transpose_b=True)  # (f_j * E), eq. 3
+    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) \
+                                                                            +tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True) \
+                                                                            #+ tf.reduce_sum(tf.multiply(u_v_b, iv), 1, keep_dims=True)
+    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) \
+                                                                            + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True) \
+                                                                            #+ tf.reduce_sum(tf.multiply(u_v_b, jv), 1, keep_dims=True)
     xuij = xui - xuj
 
     # auc score is used in test/cv
@@ -143,13 +168,16 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
     l2_norm = tf.add_n([
         l2_regulization * tf.reduce_sum(tf.multiply(u_emb, u_emb)),
-        #l2_regulization * tf.reduce_sum(tf.multiply(u_img, u_img)),
+        image_regulization * tf.reduce_sum(tf.multiply(u_img, u_img)),
         l2_regulization * tf.reduce_sum(tf.multiply(i_emb, i_emb)),
         l2_regulization * tf.reduce_sum(tf.multiply(j_emb, j_emb)),
-        #l2_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
+        embed_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
         bias_regulization * tf.reduce_sum(tf.multiply(i_b, i_b)),
-        bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b))#,
-        #visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias, visual_bias))
+        bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b)),
+        visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias, visual_bias))
+        #visual_bias_regulization * tf.reduce_sum(tf.multiply(u_v_b, u_v_b)),
+        #visual_bias_regulization * tf.reduce_sum(tf.multiply(i_v_b, i_v_b)),
+        #visual_bias_regulization * tf.reduce_sum(tf.multiply(j_v_b, j_v_b))
     ])
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
@@ -161,8 +189,8 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
 # user_count = len(user_id_mapping)
 # item_count = len(item_id_mapping)
-data_path = os.path.join('', 'review_women_brnd_fv_updated_2.csv')
-user_count, item_count, users, items, user_ratings, item_ratings, brands, prices, prod_desc = load_data_hybrid(data_path, min_items=1, min_users=4)
+data_path = os.path.join('', 'reviews_Women_scraped_cpp_fv.csv')
+user_count, item_count, users, items, user_ratings, item_ratings, brands, prices, prod_desc = load_data_hybrid(data_path, min_items=4, min_users=0, sampling= True, sample_size = 0.9)
 user_ratings_test = generate_test(user_ratings)
 
 # items: asin -> iid
@@ -189,11 +217,11 @@ b = brands_features
 r = dict(a.items() + b.items() + [(k, numpy.append(a[k],b[k])) for k in set(b) & set(a)])
 
 c = prod_desc
-image_features = dict(r.items() + c.items() + [(k, numpy.append(r[k],c[k])) for k in set(r) & set(c)])
+#image_features = dict(r.items() + c.items() + [(k, numpy.append(r[k],c[k])) for k in set(r) & set(c)])
 
 
-#images_path = "image_features_Women.b"
-#image_features = load_image_features(images_path, items)
+images_path = "image_features_Women.b"
+image_features = load_image_features(images_path, items)
 
 print "extracted image feature count: ", len(image_features)
 
@@ -204,7 +232,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     
     session.run(tf.global_variables_initializer())
     
-    for epoch in range(1, 8):
+    for epoch in range(1, 11):
         print "epoch ", epoch
         _loss_train = 0.0
         user_count = 0
