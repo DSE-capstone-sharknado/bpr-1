@@ -79,9 +79,7 @@ def load_image_features(path, items):
     features_bytes = f.read(16384) # 4 * 4096 = 16KB, fast read, don't unpack
   
     if asin in items: #only unpack 4096 bytes if w need it -- big speed up
-      features =[]
-      for i in range(0, len(features_bytes), 4): #iterate 4 str bytes at aa time and unpack into 4 byte python float obj
-        features.append(struct.unpack('f', features_bytes[i:i+4])[0])
+      features = np.fromstring(features_bytes, dtype=np.float32)
       iid=items[asin]
       image_features[iid] = features
   
@@ -135,5 +133,6 @@ if __name__ == '__main__':
   iid = items_lut["B000FIPV42"]
   print image_features[iid]
   
+  #old way takes 38Gb
 
     
