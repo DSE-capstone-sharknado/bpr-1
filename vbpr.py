@@ -78,9 +78,12 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
         
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
-         learning_rate = 0.01,
-         l2_regulization = 0.1, 
-         bias_regulization=0.1):
+         learning_rate=0.005,
+          l2_regulization=0.1,
+          bias_regulization=0.1,
+          embed_regulization = 0.007,
+          image_regulization = 0.007,
+          visual_bias_regulization=0.007):
     """
     user_count: total number of users
     item_count: total number of items
@@ -103,6 +106,12 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
                                 initializer=tf.constant_initializer(0.0))
     visual_bias = tf.get_variable("visual_bias", [1, 4096], initializer=tf.constant_initializer(0.0))
     
+    img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], 
+                               initializer=tf.random_normal_initializer(0, 0.1))
+
+    #learn nusersx20 + nusers*128 + nitems*20 + 4096 + 4096*128 parameters
+    # params = 83779*20 + 83779*128 + 302047*20 + 4096 + 524288 = 18,968,616
+    
     #lookup the latent factors by user and id
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
     u_img = tf.nn.embedding_lookup(user_img_w, u)
@@ -112,8 +121,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     j_emb = tf.nn.embedding_lookup(item_emb_w, j)
     j_b = tf.nn.embedding_lookup(item_b, j)
     
-    img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], 
-                               initializer=tf.random_normal_initializer(0, 0.1))
+
                                
 
     # MF predict: u_i > u_j
@@ -131,18 +139,21 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
     l2_norm = tf.add_n([
             l2_regulization * tf.reduce_sum(tf.multiply(u_emb, u_emb)), 
-            l2_regulization * tf.reduce_sum(tf.multiply(u_img, u_img)),
+            image_regulization * tf.reduce_sum(tf.multiply(u_img, u_img)),
             l2_regulization * tf.reduce_sum(tf.multiply(i_emb, i_emb)),
             l2_regulization * tf.reduce_sum(tf.multiply(j_emb, j_emb)),
-            l2_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
+            embed_regulization * tf.reduce_sum(tf.multiply(img_emb_w, img_emb_w)),
             bias_regulization * tf.reduce_sum(tf.multiply(i_b, i_b)),
             bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b)),
-            bias_regulization * tf.reduce_sum(tf.multiply(visual_bias,visual_bias))
+            visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias,visual_bias))
         ])
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
-    train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
-    print "Hyper-parameters: K=%d, K2=%d, lr=%f, l2r=%f, br=%f"%(hidden_dim, hidden_img_dim, learning_rate, l2_regulization, bias_regulization)
+    #train_op =  tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(loss)
+    #train_op =  tf.train.AdagradOptimizer(learning_rate).minimize(loss)
+    train_op =  tf.train.AdamOptimizer().minimize(loss)
+    # train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
+    print "Hyper-parameters: K=%d, K2=%d, lr=%f, l2r=%f"%(hidden_dim, hidden_img_dim, learning_rate, l2_regulization)
     return u, i, j, iv, jv, loss, auc, train_op
     
 
@@ -178,12 +189,11 @@ epochs =21 # ideally we should not hard code this. GD should terminate when loss
 K=20
 K2=128
 lr=0.01
-lam=1
-lam2=1 
+lam=0.1
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
-        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate =lr, l2_regulization =lam, bias_regulization=lam2)
+        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate =lr, l2_regulization =lam)
     
     session.run(tf.global_variables_initializer())
     
@@ -216,4 +226,16 @@ with tf.Graph().as_default(), tf.Session() as session:
         print ""
         
 
-# nohup time python -u vbpr.py > vbpr2-test001.log 2>&1 &
+# nohup time python -u vbpr.py > vbpr3-test005.log 2>&1 &
+
+# nohup time ./train ../tf-bpr/data/amzn/reviews_Women.txt ../tf-bpr/data/amzn/image_features_Women.b 10 10 na 0.01 9.5 0.01 na 20 "women" > logs/vbpr-test001.log 2>&1 &
+
+
+# adam optimizer
+# def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
+#           learning_rate=0.05,
+#           l2_regulization=10.0,
+#           bias_regulization=0.01,
+#           embed_regulization = 0.0,
+#           image_regulization = 0.0,
+#           visual_bias_regulization=0.01):
