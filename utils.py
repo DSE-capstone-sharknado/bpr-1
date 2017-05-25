@@ -65,64 +65,6 @@ def load_simple(path, user_min=5):
     
   return users, items, np.array(triples)
   
-
-
-
-#returns: uid->auid dict, iid->asin dict, reviews count, items by user dict
-def load_data_simple(path, min_items=5):
-  user_reviews = defaultdict(list)
-  
-
-  with open((path), 'r') as f:
-      for line in f.readlines():
-        auid, asin, _ = line.split(" ", 2)
-        user_reviews[auid].append(asin)
-
-      
-  #filter out by min_items
-  reviews_count=0
-  user_reviews_filtered = defaultdict(list)
-  for auid, asins in user_reviews.iteritems():
-    if len(asins) >= min_items: #keep
-      user_reviews_filtered[auid]=asins
-      reviews_count+=len(asins)
-      
-  
-  #now build auid,asin -> internal id LUT
-  users_lut = {}
-  items_lut = {}
-  user_count=0
-  item_count=0
-  asins_filtered=set()
-  item_dist=defaultdict(int)
-  for auid, asins in user_reviews_filtered.iteritems():
-    
-    if auid in users_lut:
-      u = users_lut[auid]
-    else:
-      user_count+=1 #new user so increment
-      users_lut[auid]=user_count
-      u = user_count
-
-    for asin in asins:
-      if asin in items_lut:
-        i = items_lut[asin]
-      else:
-        item_count+=1 #new i so increment
-        items_lut[asin]=item_count
-        i=item_count
-      item_dist[i]+=1
-        
-  #now update all the keys to use internal id
-  user_reviews_filtered_keyed=defaultdict(list)
-  for auid, asins in user_reviews_filtered.iteritems():
-    internal_asins = map(lambda asin: items_lut[asin], asins)
-    internal_key = users_lut[auid]
-    user_reviews_filtered_keyed[internal_key] = internal_asins
-    
-  
-      
-  return users_lut, items_lut, reviews_count, user_reviews_filtered_keyed, item_dist
       
 
 
@@ -164,7 +106,7 @@ if __name__ == '__main__':
   
   print "loading raw..."
   simple_path = os.path.join('data', 'amzn', 'reviews_Women.txt')
-  users_lut, items_lut, reviews = load_simple2(simple_path, user_min=5)
+  users_lut, items_lut, reviews = load_simple(simple_path, user_min=5)
   print "generating stats..."
   user_dist, item_dist, user_items, item_users = stats(reviews)
   print len(users_lut),len(items_lut),len(reviews)
@@ -184,19 +126,14 @@ if __name__ == '__main__':
 
   
   
-  # images_path = "data/amzn/image_features_Women.b"
-  # images_path = "data/amzn/image_features_Clothing_Shoes_and_Jewelry.b"
-  # image_features = load_image_features(images_path, items_lut) #51 s
+  images_path = "data/amzn/image_features_Women.b"
+  image_features = load_image_features(images_path, items_lut) #51 s
   # image_features = load_image_features_from_pickle("data/amzn/women_5_image_features.pkl") #48s
-  # print len(image_features)
-  #
-  # #a percentage of items in trainset will be missing from images.
-  # count=0
-  # for asin, iid in items_lut.iteritems():
-  #   try:
-  #     image_features[iid]
-  #   except KeyError:
-  #     count+=1
-  # print "Images not found: ",count
+  print len(image_features)
+
+  #now cross validate the image features w/ asin B000FIPV42 and the output I got from my C++ test
+  iid = items_lut["B000FIPV42"]
+  print image_features[iid]
+  
 
     
