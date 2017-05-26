@@ -10,16 +10,19 @@ from utils import load_image_features, load_simple, stats
 
 
 
-def generate_test(user_ratings):
+def generate_val_and_test(user_ratings):
     '''
     for each user, random select one rating into test set
     '''
     user_test = dict()
+    user_val = dict()
     for u, i_list in user_ratings.items():
-        user_test[u] = random.sample(user_ratings[u], 1)[0]
-    return user_test
+        samples = random.sample(i_list, 2)
+        user_test[u] = samples[0]
+        user_val[u] = samples[1]
+    return user_val, user_test
     
-def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features, sample_count=400, batch_size=512):
+def uniform_sample_batch(train_ratings, val_ratings, test_ratings, item_count, image_features, sample_count=400, batch_size=512):
     for i in xrange(sample_count):
         t = []
         iv = []
@@ -28,11 +31,11 @@ def uniform_sample_batch(train_ratings, test_ratings, item_count, image_features
             u = random.randint(1, len(train_ratings))
             
             i = random.sample(train_ratings[u], 1)[0]
-            while i == test_ratings[u]: #make sure i is not in the test set
+            while i == test_ratings[u] or i==val_ratings[u]: #make sure i is not in the test or val set
                 i = random.sample(train_ratings[u], 1)[0]
                 
             j = random.randint(0, item_count)
-            while j in train_ratings[u]:
+            while j in train_ratings[u]: #make sure j is not in users reviews (ie it is negative)
                 j = random.randint(0, item_count)
                 
             #sometimes there will not be an image for given item i or j
@@ -160,7 +163,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
 print "Loading dataset..."
 data_dir = os.path.join("data", "amzn")
-simple_path = os.path.join(data_dir, 'reviews_Women.txt')
+simple_path = os.path.join(data_dir, 'reviews_Women_5.txt')
 
 users, items, reviews_all = load_simple(simple_path, user_min=5)
 print "generating stats..."
@@ -181,7 +184,7 @@ print "extracted image feature count: ",len(image_features)
 #4096 * 24 * 302,047 = 29 GB
 
 
-test_ratings = generate_test(train_ratings)
+val_ratings, test_ratings = generate_val_and_test(train_ratings)
 
 sample_count = 400
 batch_size = 512
@@ -198,32 +201,45 @@ with tf.Graph().as_default(), tf.Session() as session:
     session.run(tf.global_variables_initializer())
     
     epoch_durations = []
+    best_auc=-1
+    best_iter=-1
     for epoch in range(1, epochs):
-        print "epoch ", epoch
-        epoch_start_time = time.time()
-        _loss_train = 0.0
-        for d, _iv, _jv in uniform_sample_batch(train_ratings, test_ratings, item_count, image_features, sample_count=sample_count, batch_size=batch_size ):
+        epoch_start = time.time()
+        train_loss_vals=[]
+        for d, _iv, _jv in uniform_sample_batch(train_ratings, val_ratings, test_ratings, item_count, image_features, sample_count=sample_count, batch_size=batch_size ):
             _loss, _ = session.run([loss, train_op], feed_dict={ u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
-            _loss_train += _loss
-        print "train_loss:", _loss_train/sample_count
+            train_loss_vals.append(_loss)
+        epoch_durations.append(time.time() - epoch_start)
         
-        epoch_end_time = time.time()
-        epoch_duration = epoch_end_time - epoch_start_time
-        epoch_durations.append(epoch_duration)
-        print "epoch time: ",epoch_duration,", avg: ",np.mean(epoch_durations)
+        val_auc_vals=[]
+        val_loss_vals=[]
+        for d, fi, fj in test_batch_generator_by_user(train_ratings, val_ratings, item_count, image_features, sample_size=300):
+            _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
+            val_loss_vals.append(_loss)
+            val_auc_vals.append(_auc)
+        val_auc = np.mean(val_auc_vals)
+        print "epoch: %d (%.2fs), train loss: %.2f, val loss: %.2f, val auc: %.2f"%(epoch, np.mean(epoch_durations), np.mean(train_loss_vals) , np.mean(val_loss_vals), val_auc )        
+        
+        #early termination/checks for convergance
+        if val_auc > best_auc:
+          best_auc = val_auc
+          best_iter = epoch
+          print "*"
+        elif val_auc < best_iter and epoch >= best_iter+15: #overfitting
+          print "Overfitted. Exiting..."
+          break
+        
+        if epoch%5 != 0:
+          continue
+        
+        test_auc_vals=[]
+        for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500):
+            _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
+            test_auc_vals.append(_auc)
+        print "test auc: %.2f"%(np.mean(test_auc_vals) )
         
 
-        print "auc..."
-        auc_values=[]
-        loss_values=[]
-        user_count=0
-        for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=300):
-            _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
-            loss_values.append(_loss)
-            auc_values.append(_auc)
-            user_count+=1
-            print "user ",user_count," auc:",_auc,", loss:",_loss,", avg loss:",np.mean(loss_values),", avg auc:",np.mean(auc_values)
-        print ""
+    print "best model got %.2f AUC on iteration %d"%(best_auc,best_iter)  
         
 
 # nohup time python -u vbpr.py > vbpr3-test005.log 2>&1 &
