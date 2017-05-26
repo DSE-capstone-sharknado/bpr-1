@@ -78,12 +78,12 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
         
 def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128, 
-         learning_rate=0.005,
-          l2_regulization=0.1,
-          bias_regulization=0.1,
-          embed_regulization = 0.007,
-          image_regulization = 0.007,
-          visual_bias_regulization=0.007):
+         learning_rate=0.001,
+          l2_regulization=0.001,
+          bias_regulization=0.001,
+          embed_regulization = 0.001,
+          image_regulization = 0.001,
+          visual_bias_regulization=0.001):
     """
     user_count: total number of users
     item_count: total number of items
