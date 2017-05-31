@@ -50,7 +50,7 @@ def uniform_sample_batch(train_ratings, val_ratings, test_ratings, item_count, i
             jv.append(image_features[j])
         yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
 
-def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000, neg_sample_size=1000):
+def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000, neg_sample_size=1000, cold_start=False):
     # using leave one cv
     for u in random.sample(test_ratings.keys(), sample_size): #uniform random sampling w/o replacement
         t = []
@@ -60,6 +60,10 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_
         i = test_ratings[u]
         #check if we have an image for i, sometimes we dont...
         if i not in image_features:
+          continue
+          
+        #filter for cold start
+        if cold_start and item_dist[i] > 5:
           continue
         
         for _ in xrange(neg_sample_size):
@@ -241,6 +245,14 @@ with tf.Graph().as_default(), tf.Session() as session:
         test_auc_vals.append(_auc)
     test_auc = np.mean(test_auc_vals) 
     print "Best model iteration %d, test: %.3f, val: %.3f"%(best_iter,test_auc,best_auc) 
+    
+    
+    #cold auc
+    cold_auc_vals=[]
+    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500, cold_start=True):
+        _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
+        cold_auc_vals.append(_auc)
+    print "cold auc: %.2f"%(np.mean(cold_auc_vals) )
         
 
      
