@@ -102,7 +102,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], 
                                 initializer=tf.random_normal_initializer(0, 0.1))
     user_img_w = tf.get_variable("user_img_w", [user_count+1, hidden_img_dim],
-                                initializer=tf.random_normal_initializer(0, 0.1))
+                                initializer=tf.random_normal_initializer(0, 0.1)) #theta_u
     item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], 
                                 initializer=tf.random_normal_initializer(0, 0.1))
     item_b = tf.get_variable("item_b", [item_count+1, 1], 
@@ -112,8 +112,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
     img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim], 
                                initializer=tf.random_normal_initializer(0, 0.1))
 
-    #learn nusersx20 + nusers*128 + nitems*20 + 4096 + 4096*128 parameters
-    # params = 83779*20 + 83779*128 + 302047*20 + 4096 + 524288 = 18,968,616
+                        
     
     #lookup the latent factors by user and id
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
@@ -191,6 +190,8 @@ batch_size = 512
 epochs =21 # ideally we should not hard code this. GD should terminate when loss converges
 K=20
 K2=128
+K=10
+K2=10
 lr=0.01
 lam=0.1
 
