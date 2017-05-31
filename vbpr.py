@@ -199,6 +199,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
         u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate =lr, l2_regulization =lam)
     
+    saver = tf.train.Saver()
     session.run(tf.global_variables_initializer())
     
     epoch_durations = []
@@ -226,21 +227,23 @@ with tf.Graph().as_default(), tf.Session() as session:
           best_auc = val_auc
           best_iter = epoch
           print "*"
+          saver.save(session, "logs/")
         elif val_auc < best_iter and epoch >= best_iter+15: #overfitting
           print "Overfitted. Exiting..."
           break
         
-        if epoch%5 != 0:
-          continue
-        
-        test_auc_vals=[]
-        for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500):
-            _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
-            test_auc_vals.append(_auc)
-        print "test auc: %.2f"%(np.mean(test_auc_vals) )
+    #restore best model from checkpoint
+    saver.restore(session, "logs/")
+    #test auc
+    test_auc_vals=[]
+    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500):
+        _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
+        test_auc_vals.append(_auc)
+    test_auc = np.mean(test_auc_vals) 
+    print "Best model iteration %d, test: %.3f, val: %.3f"%(best_iter,test_auc,best_auc) 
         
 
-    print "best model got %.2f AUC on iteration %d"%(best_auc,best_iter)  
+     
         
 
 # nohup time python -u vbpr.py > vbpr3-test005.log 2>&1 &
