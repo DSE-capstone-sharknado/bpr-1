@@ -55,7 +55,7 @@ def load_data_hybrid(data_path, min_items=1, min_users=1, sampling= True, sample
                 if (len(line.split(",")) == 6):
                     prod_desc[i] = [int(el) for el in list(product_desc)[:-2][1:]]
                     if (len(prod_desc[i])==0):
-                        prod_desc[i] = list(np.zeros(4525))
+                        prod_desc[i] = list(np.zeros(4524))
 
             user_ratings[u].add(i)
             item_ratings[i].add(u)

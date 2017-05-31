@@ -233,21 +233,16 @@ a = prices_features
 b = brands_features
 c = dict([(k, numpy.append(a[k], b[k])) for k in set(b) & set(a)])
 
-# e = c
+e = c
 
 
 # Deepthi commented this for testing
-d = prod_desc
-e = dict([(k, numpy.append(c[k], d[k])) for k in set(c) & set(d)])
+# d = prod_desc
+# e = dict([(k, numpy.append(c[k], d[k])) for k in set(c) & set(d)])
 
-# test = []
-# for k,v in d.iteritems():
-#     test.append(len(v))
-#
-# print 'drop_duplicates'
-# print pd.DataFrame(test).to_csv('cnt_distinct.csv')
 
 images_path = os.path.join('data', 'image_features_Women.b')
+# images_path = "image_features_Women.b"
 f = load_image_features(images_path, items)
 
 image_features = dict([(k, numpy.append(e[k],f[k])) for k in set(e) & set(f)])
