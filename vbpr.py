@@ -89,8 +89,8 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
           l2_regulization=0.001,
           bias_regulization=0.001,
           embed_regulization = 0.001,
-          image_regulization = 0.001,
-          visual_bias_regulization=0.001):
+          image_regulization = 0.0,
+          visual_bias_regulization=0.0):
     """
     user_count: total number of users
     item_count: total number of items
