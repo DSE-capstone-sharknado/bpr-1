@@ -190,10 +190,8 @@ print "extracted image feature count: ",len(image_features)
 val_ratings, test_ratings = generate_val_and_test(train_ratings)
 
 sample_count = 400
-batch_size = 512
-epochs =21 # ideally we should not hard code this. GD should terminate when loss converges
-K=20
-K2=128
+batch_size = 612
+epochs =255 # ideally we should not hard code this. GD should terminate when loss converges
 K=10
 K2=10
 lam=10.0
@@ -201,7 +199,7 @@ bias_reg=.01
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
-        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, learning_rate =lr, l2_regulization =lam)
+        u, i, j, iv, jv, loss, auc, train_op = vbpr(user_count, item_count, hidden_dim=K, hidden_img_dim=K2, l2_regulization =lam, bias_regulization=bias_reg)
     
     saver = tf.train.Saver()
     session.run(tf.global_variables_initializer())
@@ -229,7 +227,7 @@ with tf.Graph().as_default(), tf.Session() as session:
             val_loss_vals.append(_loss)
             val_auc_vals.append(_auc)
         val_auc = np.mean(val_auc_vals)
-        print "epoch: %d (%.2fs), train loss: %.2f, val loss: %.2f, val auc: %.2f"%(epoch, np.mean(epoch_durations), np.mean(train_loss_vals) , np.mean(val_loss_vals), val_auc )        
+        print "epoch: %d (%.2fs), train loss: %.2f, val loss: %.2f, val auc: %.2f"%(epoch, np.mean(epoch_durations), np.mean(train_loss_vals) , np.mean(val_loss_vals), val_auc ),
         
         #early termination/checks for convergance
         if val_auc > best_auc:
@@ -237,9 +235,11 @@ with tf.Graph().as_default(), tf.Session() as session:
           best_iter = epoch
           print "*"
           saver.save(session, "logs/")
-        elif val_auc < best_iter and epoch >= best_iter+15: #overfitting
+        elif val_auc < best_iter and epoch >= best_iter+21: #overfitting
           print "Overfitted. Exiting..."
           break
+        else:
+          print
         
     #restore best model from checkpoint
     saver.restore(session, "logs/")
