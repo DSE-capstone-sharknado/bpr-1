@@ -217,6 +217,11 @@ with tf.Graph().as_default(), tf.Session() as session:
             train_loss_vals.append(_loss)
         epoch_durations.append(time.time() - epoch_start)
         
+        if epoch % 5 != 0:
+          print "epoch: %d (%.2fs)"%(epoch, np.mean(epoch_durations) )        
+          continue 
+        
+        #train eval
         val_auc_vals=[]
         val_loss_vals=[]
         for d, fi, fj in test_batch_generator_by_user(train_ratings, val_ratings, item_count, image_features, sample_size=300):
