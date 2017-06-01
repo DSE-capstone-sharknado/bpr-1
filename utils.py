@@ -66,7 +66,7 @@ def load_simple(path, user_min=5):
   return users, items, np.array(triples)
   
       
-
+NORM_FACTOR = 58.388599
 
 #load image features for the given asin collection into dictionary
 def load_image_features(path, items):
@@ -79,7 +79,7 @@ def load_image_features(path, items):
     features_bytes = f.read(16384) # 4 * 4096 = 16KB, fast read, don't unpack
   
     if asin in items: #only unpack 4096 bytes if w need it -- big speed up
-      features = np.fromstring(features_bytes, dtype=np.float32)
+      features = np.fromstring(features_bytes, dtype=np.float32)/NORM_FACTOR
       iid=items[asin]
       image_features[iid] = features
   
