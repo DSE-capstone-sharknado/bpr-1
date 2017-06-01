@@ -166,7 +166,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
 print "Loading dataset..."
 data_dir = os.path.join("data", "amzn")
-simple_path = os.path.join(data_dir, 'reviews_Women_5.txt')
+simple_path = os.path.join(data_dir, 'reviews_Women.txt')
 
 users, items, reviews_all = load_simple(simple_path, user_min=5)
 print "generating stats..."
@@ -222,7 +222,7 @@ with tf.Graph().as_default(), tf.Session() as session:
         #train eval
         val_auc_vals=[]
         val_loss_vals=[]
-        for d, fi, fj in test_batch_generator_by_user(train_ratings, val_ratings, item_count, image_features, sample_size=300):
+        for d, fi, fj in test_batch_generator_by_user(train_ratings, val_ratings, item_count, image_features, sample_size=1000):
             _loss, _auc = session.run([loss, auc], feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
             val_loss_vals.append(_loss)
             val_auc_vals.append(_auc)
@@ -245,7 +245,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     saver.restore(session, "logs/")
     #test auc
     test_auc_vals=[]
-    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500):
+    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000):
         _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
         test_auc_vals.append(_auc)
     test_auc = np.mean(test_auc_vals) 
@@ -254,7 +254,7 @@ with tf.Graph().as_default(), tf.Session() as session:
     
     #cold auc
     cold_auc_vals=[]
-    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=500, cold_start=True):
+    for d, fi, fj in test_batch_generator_by_user(train_ratings, test_ratings, item_count, image_features, sample_size=3000, cold_start=True):
         _auc = session.run(auc, feed_dict={u:d[:,0], i:d[:,1], j:d[:,2], iv:fi, jv:fj})
         cold_auc_vals.append(_auc)
     print "cold auc: %.2f"%(np.mean(cold_auc_vals) )
