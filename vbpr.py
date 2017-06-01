@@ -131,7 +131,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
                                
 
     # MF predict: u_i > u_j
-    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3 1x4096 x 4086x128 => 1x128 #plot these on 2d scatter
+    theta_i = tf.matmul(iv, img_emb_w) # (f_i * E), eq. 3 1xK2 x 4096xK2 => 1xK2 #plot these on 2d scatter
     theta_j = tf.matmul(jv, img_emb_w) # (f_j * E), eq. 3
     xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
     xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
@@ -266,13 +266,3 @@ with tf.Graph().as_default(), tf.Session() as session:
 # nohup time python -u vbpr.py > vbpr3-test005.log 2>&1 &
 
 # nohup time ./train ../tf-bpr/data/amzn/reviews_Women.txt ../tf-bpr/data/amzn/image_features_Women.b 10 10 na 0.01 9.5 0.01 na 20 "women" > logs/vbpr-test001.log 2>&1 &
-
-
-# adam optimizer
-# def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
-#           learning_rate=0.05,
-#           l2_regulization=10.0,
-#           bias_regulization=0.01,
-#           embed_regulization = 0.0,
-#           image_regulization = 0.0,
-#           visual_bias_regulization=0.01):
