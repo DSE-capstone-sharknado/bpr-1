@@ -196,8 +196,8 @@ K=20
 K2=128
 K=10
 K2=10
-lr=0.01
-lam=0.1
+lam=10.0
+bias_reg=.01
 
 with tf.Graph().as_default(), tf.Session() as session:
     with tf.variable_scope('vbpr'):
