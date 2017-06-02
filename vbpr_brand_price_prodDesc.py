@@ -4,6 +4,8 @@ import os
 import cPickle as pickle
 import numpy
 import random
+import matplotlib.pyplot as plt
+
 
 import sys
 from utils import load_data_hybrid, load_image_features
@@ -66,7 +68,7 @@ def generate_test(user_ratings):
 
 def test_batch_generator_by_user(train_ratings, test_ratings, item_ratings, item_count, image_features, cold_start = False, cold_start_thresh = 5):
     # using leave one cv
-    for u in random.sample(test_ratings.keys(), 3000):
+    for u in random.sample(test_ratings.keys(), 4000):
     #for u in test_ratings.keys():
         i = test_ratings[u]
         if (cold_start and len(item_ratings[i]) > cold_start_thresh-1):
@@ -99,11 +101,10 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_ratings, item
 
 
 def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
-         learning_rate=0.001,
-         l2_regulization=1,
+         l2_regulization=0.1,
          bias_regulization=0.01,
          embed_regulization = 0,
-         image_regulization =1,
+         image_regulization =0.1,
          visual_bias_regulization = 0.01):
     """
     user_count: total number of users
@@ -222,8 +223,8 @@ e = dict([(k, numpy.append(c[k],d[k])) for k in set(c) & set(d)])
 images_path = "image_features_Women.b"
 f = load_image_features(images_path, items)
 
-#image_features = dict([(k, numpy.append(e[k],f[k])) for k in set(e) & set(f)])
-image_features = f
+image_features = dict([(k, numpy.append(e[k],f[k])) for k in set(e) & set(f)])
+#image_features = f
 print "extracted image feature count and length: ", len(image_features), len(image_features[1])
 
 
@@ -248,22 +249,24 @@ with tf.Graph().as_default(), tf.Session() as session:
         auc_values = []
         _loss_test = 0.0
         user_count = 0
-        print "test auc ..."
         for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_ratings, item_count, image_features, cold_start = False):
             user_count += 1
             _loss, _auc = session.run([loss, auc], feed_dict={u: d[:, 0], i: d[:, 1], j: d[:, 2], iv: _iv, jv: _jv})
             _loss_test += _loss
             auc_values.append(_auc)
-        print "test_loss: ", _loss_test / user_count, " auc: ", numpy.mean(auc_values)
+        print "test_loss: ", _loss_test / user_count, "test auc: ", numpy.mean(auc_values)
 
         auc_values_cs = []
         _loss_test_cs = 0.0
         user_count = 0
-        print "cold start test auc ..."
-        for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_ratings, item_count, image_features, cold_start = True, cold_start_thresh = 5):
+        for d, _iv, _jv in test_batch_generator_by_user(user_ratings, user_ratings_test, item_ratings, item_count, image_features, cold_start = True, cold_start_thresh = 10):
             user_count += 1
             _loss, _auc = session.run([loss, auc], feed_dict={u: d[:, 0], i: d[:, 1], j: d[:, 2], iv: _iv, jv: _jv})
             _loss_test_cs += _loss
             auc_values_cs.append(_auc)
         print "cold start test_loss: ", _loss_test_cs / user_count, "cold start auc: ", numpy.mean(auc_values_cs)
+
+    plt.plot(auc_values)
+    plt.plot(auc_values_cs)
+    plt.show()
 
