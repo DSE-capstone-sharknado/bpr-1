@@ -166,7 +166,7 @@ def vbpr(user_count, item_count, hidden_dim=20, hidden_img_dim=128,
 
 print "Loading dataset..."
 data_dir = os.path.join("data", "amzn")
-simple_path = os.path.join(data_dir, 'reviews_Women.txt')
+simple_path = os.path.join(data_dir, 'reviews_Women_ALL_scraped.csv')
 
 users, items, reviews_all = load_simple(simple_path, user_min=5)
 print "generating stats..."

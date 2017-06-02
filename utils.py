@@ -28,7 +28,7 @@ def load_simple(path, user_min=5):
   reviews=[]
   with open((path), 'r') as f:
     for line in f.readlines():
-      auid, asin, _ = line.split(" ", 2)
+      auid, asin, _ = line.split(",", 2)
       reviews.append([auid,asin])
   
   #stats
@@ -103,7 +103,7 @@ def load_and_save_image_features(path, items):
 if __name__ == '__main__':
   
   print "loading raw..."
-  simple_path = os.path.join('data', 'amzn', 'reviews_Women.txt')
+  simple_path = os.path.join('data', 'amzn', 'reviews_Women_ALL_scraped.csv')
   users_lut, items_lut, reviews = load_simple(simple_path, user_min=5)
   print "generating stats..."
   user_dist, item_dist, user_items, item_users = stats(reviews)
