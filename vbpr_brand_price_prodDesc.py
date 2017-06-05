@@ -100,7 +100,7 @@ def test_batch_generator_by_user(train_ratings, test_ratings, item_ratings, item
         yield numpy.asarray(t), numpy.vstack(tuple(ilist)), numpy.vstack(tuple(jlist))
 
 
-def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
+def vbpr(user_count, item_count, advanced_features = True, hidden_dim=10, hidden_img_dim=10,
          l2_regulization=0.1,
          bias_regulization=0.01,
          embed_regulization = 0,
@@ -110,7 +110,7 @@ def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
     user_count: total number of users
     item_count: total number of items
     hidden_dim: hidden feature size of MF
-    hidden_img_dim: [4096, hidden_img_dim]
+    hidden_img_dim: hidden visual/non-visual feature size of MF
     """
     image_feat_dim = len(image_features[1])
     u = tf.placeholder(tf.int32, [None])
@@ -133,13 +133,10 @@ def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
     img_emb_w = tf.get_variable("img_emb_w", [hidden_img_dim, image_feat_dim],
                                 initializer=tf.random_normal_initializer(0, 0.1))
 
-    visual_b = tf.get_variable("visual_b", [user_count + 1, image_feat_dim], initializer=tf.random_normal_initializer(0, 0.1))
     visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.random_normal_initializer(0, 0.1))
 
     # biases
     item_b = tf.get_variable("item_b", [item_count + 1, 1], initializer=tf.constant_initializer(0.0))
-    # user bias just cancels out it seems
-    # missing visual bias?
 
     # pull out the respective latent factor vectors for a given user u and items i & j
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
@@ -150,19 +147,21 @@ def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
     # get the respective biases for items i & j
     i_b = tf.nn.embedding_lookup(item_b, i)
     j_b = tf.nn.embedding_lookup(item_b, j)
-    u_v_b = tf.nn.embedding_lookup(visual_b, u)
 
 
     # MF predict: u_i > u_j
     # MF predict: u_i > u_j
     theta_i = tf.matmul(iv, img_emb_w, transpose_b=True)  # (f_i * E), eq. 3
     theta_j = tf.matmul(jv, img_emb_w, transpose_b=True)  # (f_j * E), eq. 3
-    xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) \
-                                                                            + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(u_v_b, iv), 1, keep_dims=True)
-    xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) \
-                                                                            + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True) \
-                                                                            #+ tf.reduce_sum(tf.multiply(u_v_b, jv), 1, keep_dims=True)
+    if advanced_features():
+        xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_i), 1, keep_dims=True) \
+                                                                            + tf.reduce_sum(tf.multiply(visual_bias, iv), 1, keep_dims=True)
+        xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True) + tf.reduce_sum(tf.multiply(u_img, theta_j), 1, keep_dims=True) \
+                                                                            + tf.reduce_sum(tf.multiply(visual_bias, jv), 1, keep_dims=True)
+    else:
+        xui = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1, keep_dims=True)
+        xuj = j_b + tf.reduce_sum(tf.multiply(u_emb, j_emb), 1, keep_dims=True)
+
     xuij = xui - xuj
 
     # auc score is used in test/cv
@@ -179,16 +178,12 @@ def vbpr(user_count, item_count, hidden_dim=10, hidden_img_dim=10,
         bias_regulization * tf.reduce_sum(tf.multiply(i_b, i_b)),
         bias_regulization * tf.reduce_sum(tf.multiply(j_b, j_b)),
         visual_bias_regulization * tf.reduce_sum(tf.multiply(visual_bias, visual_bias))
-        #visual_bias_regulization * tf.reduce_sum(tf.multiply(u_v_b, u_v_b))
     ])
 
     loss = l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(xuij)))
-    #train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, var_list= [item_emb_w, user_emb_w, user_img_w, img_emb_w, visual_bias, item_b])
     train_op = tf.train.AdamOptimizer().minimize(loss)
     return u, i, j, iv, jv, loss, auc, train_op
 
-
-# In[17]:
 
 data_path = os.path.join('', 'reviews_Women_scraped_cpp_fv.csv')
 user_count, item_count, users, items, user_ratings, item_ratings, brands, prices, prod_desc = load_data_hybrid(data_path, min_items=4, min_users=0, sampling= True, sample_size = 0.8)
@@ -223,8 +218,8 @@ e = dict([(k, numpy.append(c[k],d[k])) for k in set(c) & set(d)])
 images_path = "image_features_Women.b"
 f = load_image_features(images_path, items)
 
-image_features = dict([(k, numpy.append(e[k],f[k])) for k in set(e) & set(f)])
-#image_features = f
+#image_features = dict([(k, numpy.append(e[k],f[k])) for k in set(e) & set(f)])
+image_features = b
 print "extracted image feature count and length: ", len(image_features), len(image_features[1])
 
 
@@ -266,7 +261,4 @@ with tf.Graph().as_default(), tf.Session() as session:
             auc_values_cs.append(_auc)
         print "cold start test_loss: ", _loss_test_cs / user_count, "cold start auc: ", numpy.mean(auc_values_cs)
 
-    plt.plot(auc_values)
-    plt.plot(auc_values_cs)
-    plt.show()
 
