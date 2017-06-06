@@ -88,8 +88,13 @@ deploy.sh [comment]
 
 ## BPR
 
-Train routine takes about 15-20 min
+Train routine takes about 10 min
 .67 AUC
+
+run w/o GPU
+CUDA_VISIBLE_DEVICES="" time python bpr.py
+
+tensorboard --logdir=logs/log_simple_stats/
 
 ## VBPR
 
