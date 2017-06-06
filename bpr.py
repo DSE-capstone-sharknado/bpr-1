@@ -1,99 +1,55 @@
-import numpy
+from model import Model
+from corpus import Corpus
+from sampling import Uniform
 import tensorflow as tf
-import os
-import random
 import time
 import numpy as np
-from utils import load_image_features, load_simple, stats
-import corpus
-from datetime import datetime
-import model
-now = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
-class Bpr(model.Model):
-  def __init__(self, corpus, K, reg_rate, bias_reg, max_epochs, session):
-    model.Model.__init__(self, corpus)
-    print "starting BPR model..."
+class BPR(Model):
+  def __init__(self, session, corpus, sampler, k, factor_reg, bias_reg):
+    self.sampler = sampler
     
-    self.K=K
-    self.reg_rate = reg_rate
+    self.lfactor_reg = factor_reg
     self.bias_reg = bias_reg
-    self.max_epochs = max_epochs
-    self.session = session
+    self.K=k
+    
+    #build model
+    self.u, self.i, self.j, self.mf_auc, self.bprloss, self.train_op = BPR.bpr_mf(corpus.user_count, corpus.item_count, k, regulation_rate=factor_reg, bias_reg=bias_reg)
+    
+    Model.__init__(self, corpus, session) #this needs to go after model construcion b/c it needs TF variables to exist
+    
+    print "BPR - K=%d, reg_lf: %.2f, reg_bias=%.2f"%(k, factor_reg, bias_reg)
   
-  @classmethod
-  def restore(cls, session):
-    user_count=1
-    item_count=1
-    hidden_dim=1
-    user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    item_emb_w = tf.get_variable("item_emb_w", [item_count+1, hidden_dim], initializer=tf.random_normal_initializer(0, 0.1))
-    item_b = tf.get_variable("item_b", [item_count+1, 1], initializer=tf.random_normal_initializer(0, 0.1))    #item bias
-    user_b = tf.get_variable("user_b", [user_count+1, 1], initializer=tf.random_normal_initializer(0, 0.1))    #user bias
-    saver = tf.train.Saver()
-    saver.restore(session, "logs/")
-    return cls(None, -1, -1, -1, -1, session)
-  
-  def train(self, batch_size, sample_count, learning_rate=0.05):
-    model_name="BPR-K=%d_l1=%.2f_l2=%.2f"%(self.K, self.reg_rate, self.bias_reg)
-    print model_name
+  def train(self, max_iterations, batch_size, batch_count):
+    print "max_iterations: %d, batch_size: %d, batch_count: %d"%(max_iterations, batch_size, batch_count)
+    corpus = self.corpus
+    user_count = self.corpus.user_count
+    item_count = self.corpus.item_count
+    user_items = self.corpus.user_items
+    item_dist = self.corpus.item_dist
     
-    user_count = len(self.corpus.user_items)
-    item_count = len(self.corpus.item_users)
+    val_ratings = self.val_ratings
+    test_ratings = self.test_ratings
     
+    u, i, j, mf_auc, bprloss, train_op = self.u, self.i, self.j, self.mf_auc, self.bprloss, self.train_op
     
-    print "training..."
-    self.u, self.i, self.j, self.mf_auc, self.bprloss, train_op = self.bpr_mf(user_count, item_count, self.K, lr=learning_rate, regulation_rate=self.reg_rate, bias_reg=self.bias_reg)
-    self.merged = tf.summary.merge_all()
-    self.train_writer = tf.summary.FileWriter('logs/train/run-%s'%now, self.session.graph)
-    self.test_writer  = tf.summary.FileWriter('logs/test/run-%s'%now, self.session.graph)
-    saver = tf.train.Saver()
-    self.session.run(tf.global_variables_initializer())
-    
-    epoch_durations = []
-    best_auc=-1
-    best_iter=-1
-    for epoch in range(1, self.max_epochs+1):
+    for epoch in range(1, max_iterations+1):
         epoch_start_time = time.time()
         train_loss_vals=[]
         
-        for batch in self.generate_train_batch(batch_size=batch_size, sample_count=sample_count):
-          _bprloss, _ = self.session.run([self.bprloss, train_op], feed_dict={self.u:batch[:,0], self.i:batch[:,1], self.j:batch[:,2]})
-          train_loss_vals.append(_bprloss)
+        for batch in self.sampler.generate_train_batch(user_items, val_ratings, test_ratings, item_count, None, sample_count=batch_count, batch_size=batch_size ):
+          _batch_loss, _ = self.session.run([bprloss, train_op], feed_dict={u:batch[:,0], i:batch[:,1], j:batch[:,2]})
+          train_loss_vals.append(_batch_loss)
+
+        duration = time.time() - epoch_start_time
         
-        epoch_durations.append(time.time() - epoch_start_time)
-          
-        #val loss
-        val_auc, val_loss, _ = self.eval(self.val_ratings)
+        yield epoch, duration, np.mean(train_loss_vals)
         
-        print "epoch: %d (%.2fs), \ttrain loss: %.2f, \tval loss: %.2f, \tval auc: %.2f"%(epoch, np.mean(epoch_durations), np.mean(train_loss_vals) , np.mean(val_loss), val_auc )
-        
-        #early termination/checks for convergance
-        if val_auc > best_auc:
-          best_auc = val_auc
-          best_iter = epoch
-          print "*"
-          saver.save(self.session, "logs/")
-        elif val_auc < best_iter and epoch >= best_iter+15: #overfitting
-          print "Overfitted. Exiting..."
-          break
-    
-    
-    #restore best model from checkpoint
-    saver.restore(self.session, "logs/")
-    #test auc
-    test_auc, test_loss, _  = self.eval(self.test_ratings, user_size=500)
-    print "test auc: ",test_auc 
-    
-    
-    #coldstart auc
-    cold_auc, cold_loss, _ = self.eval(self.test_ratings, cold_start=True, user_size=500)
-    print "cold auc: ", cold_auc
     
     self.session.close()
   
-  
-  def bpr_mf(self, user_count, item_count, hidden_dim, lr=0.1, regulation_rate = 0.0001, bias_reg=.01):
+  @classmethod
+  def bpr_mf(cls, user_count, item_count, hidden_dim, lr=0.1, regulation_rate = 0.0001, bias_reg=.01):
       
       #model input
       u = tf.placeholder(tf.int32, [None])
@@ -149,27 +105,17 @@ class Bpr(model.Model):
       train_op =  tf.train.AdamOptimizer().minimize(bprloss, global_step=global_step)
       return u, i, j, mf_auc, bprloss, train_op
   
-  
-  def eval(self, dataset, user_size=300, cold_start=False):
-      '''
-      dataset is a dictionary keyed by user where value is item id. This is either the val or test set to which we want to eval.
-      '''
-      user_count=0
+  def evaluate(self, eval_set, sample_size=1000 , cold_start=False):
+      u, i, j, auc, loss, train_op = self.u, self.i, self.j, self.mf_auc, self.bprloss, self.train_op
+      
       loss_vals=[]
       auc_vals=[]
-      for t_uij in self.generate_test_batch(dataset, users_size=user_size, cold_start=cold_start):
-          _loss, user_auc, summary = self.session.run([self.bprloss, self.mf_auc, self.merged], feed_dict={self.u:t_uij[:,0], self.i:t_uij[:,1], self.j:t_uij[:,2]})
+      for uij in self.sampler.generate_user_eval_batch(self.corpus.user_items, eval_set, self.corpus.item_count, self.corpus.item_dist, None, sample_size=sample_size, cold_start=cold_start):
+          _loss, user_auc = self.session.run([loss, auc], feed_dict={u: uij[:,0], i: uij[:,1], j: uij[:,2]})
           loss_vals.append(_loss)
           auc_vals.append(user_auc)
-          user_count+=1
-          self.train_writer.add_summary(summary, user_count)
       
       auc = np.mean(auc_vals)
       loss = np.mean(loss_vals)
-      return auc, loss, user_count
-
-
-if __name__ == '__main__':
-  pass
-
-
+      return auc, loss
+    
