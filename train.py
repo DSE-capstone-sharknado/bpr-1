@@ -11,23 +11,31 @@ import numpy as np
 
 def main(_):
   corpus = Corpus()
-  corpus.load_data(FLAGS.reviews_path, FLAGS.images_path, 5, 0);
+  corpus.load_data(FLAGS.reviews_path, FLAGS.images_path, FLAGS.user_min, 0);
   
   sampler = sampling.Uniform()
+  session = tf.Session()
   
   model = None
   if FLAGS.model == "BPR":
-    model = BPR(tf.Session(), corpus, sampler, FLAGS.K, FLAGS.reg, FLAGS.bias_reg)
+    model = BPR(session, corpus, sampler, FLAGS.K, FLAGS.reg, FLAGS.bias_reg)
   elif FLAGS.model == "VBPR": 
-    model = VBPR(tf.Session(), corpus, sampler, FLAGS.K, FLAGS.K2, FLAGS.reg, FLAGS.bias_reg)
+    model = VBPR(session, corpus, sampler, FLAGS.K, FLAGS.K2, FLAGS.reg, FLAGS.bias_reg)
   elif FLAGS.model == "HBPR":
-    model = HBPR(tf.Session(), corpus, sampler, FLAGS.K, FLAGS.K2, FLAGS.reg, FLAGS.bias_reg)
+    model = HBPR(session, corpus, sampler, FLAGS.K, FLAGS.K2, FLAGS.reg, FLAGS.bias_reg)
   else:
     raise Exception("Could not find model %s"%FLAGS.model)
   
-  evaluate(model)
+  evaluate(model) #find the best model
+  
+  session.close()
 
 def evaluate(model):
+  #get initial loss
+  val_auc, val_loss = model.evaluate(model.val_ratings,  sample_size=1000)
+  print "initial val loss: %.2f, val auc: %.2f"%(val_loss, val_auc )
+  
+  #start training loop
   epoch_durations = []
   best_auc=-1
   best_iter=-1
@@ -57,12 +65,12 @@ def evaluate(model):
   #restore best model from checkpoint
   model.restore()
   #test auc
-  test_auc, test_loss = model.evaluate(model.test_ratings, sample_size=100)
+  test_auc, test_loss = model.evaluate(model.test_ratings, sample_size=1000)
   print "Best model iteration %d, test: %.3f, val: %.3f"%(best_iter, test_auc, best_auc)
 
   
   #cold auc
-  cold_auc, cold_loss = model.evaluate(model.test_ratings, sample_size=100, cold_start=True)
+  cold_auc, cold_loss = model.evaluate(model.test_ratings, sample_size=1000, cold_start=True)
   print "cold auc: %.2f"%(cold_auc)
 
 if __name__ == '__main__':
@@ -133,6 +141,12 @@ if __name__ == '__main__':
       type=str,
       default="BPR",
       help='The name of this trainging session'
+  )
+  parser.add_argument(
+      '--user_min',
+      type=int,
+      default=5,
+      help='users in training set have at least this many reviews'
   )
   
   FLAGS, unparsed = parser.parse_known_args()

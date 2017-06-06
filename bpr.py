@@ -45,8 +45,6 @@ class BPR(Model):
         
         yield epoch, duration, np.mean(train_loss_vals)
         
-    
-    self.session.close()
   
   @classmethod
   def bpr_mf(cls, user_count, item_count, hidden_dim, lr=0.1, regulation_rate = 0.0001, bias_reg=.01):

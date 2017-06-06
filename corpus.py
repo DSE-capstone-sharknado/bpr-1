@@ -147,10 +147,10 @@ class Corpus(object):
 
     return image_features
     
-  def load_reviews(self, path):
+  def load_reviews(self, path, user_min):
     print "Loading dataset from: ",path
 
-    users, items, reviews_all = Corpus.load_simple(path, user_min=5)
+    users, items, reviews_all = Corpus.load_simple(path, user_min=user_min)
     print "generating stats..."
     user_dist, item_dist, train_ratings, item_users = Corpus.stats(reviews_all)
 
@@ -182,7 +182,7 @@ class Corpus(object):
   
   def load_data(self, reviews_path, images_path, user_min, item_min):
     #load reviews
-    self.load_reviews(reviews_path)
+    self.load_reviews(reviews_path, user_min)
     if images_path:
       self.load_images(images_path, self.items)
     
