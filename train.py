@@ -1,6 +1,6 @@
-from vbpr import VBPR
-from bpr import BPR
-from hbpr import HBPR
+from models.vbpr import VBPR
+from models.bpr import BPR
+from models.hbpr import HBPR
 from corpus import Corpus
 import argparse
 import os
@@ -39,6 +39,7 @@ def evaluate(model):
   epoch_durations = []
   best_auc=-1
   best_iter=-1
+  
   for iteration, duration, train_loss in model.train(FLAGS.max_iterations, FLAGS.batch_size, FLAGS.batch_count ):
     epoch_durations.append(duration)
     
@@ -47,7 +48,7 @@ def evaluate(model):
       continue
     
     #train eval
-    val_auc, val_loss = model.evaluate(model.val_ratings,  sample_size=1000)
+    val_auc, val_loss = model.evaluate(model.val_ratings,  sample_size=500)
     print "iteration: %d (%.2fs), train loss: %.2f, val loss: %.2f, val auc: %.2f"%(iteration, np.mean(epoch_durations), train_loss ,val_loss, val_auc ),
     
     #early termination/checks for convergance

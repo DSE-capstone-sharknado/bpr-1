@@ -45,6 +45,7 @@ class Uniform(Sampling):
             if image_features:
               iv.append(image_features[i])
               jv.append(image_features[j])
+        
         if image_features:      
           yield numpy.asarray(t), numpy.vstack(tuple(iv)), numpy.vstack(tuple(jv))
         else:
