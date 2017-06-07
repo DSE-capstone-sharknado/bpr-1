@@ -80,7 +80,7 @@ class BPR(Model):
       #
       # average AUC = mean( auc for each user in test set)
       mf_auc = tf.reduce_mean(tf.to_float(xuij > 0)) # xui - xui > 0 == xui > xuj
-      tf.summary.scalar('user auc', mf_auc)
+      tf.summary.scalar('user_auc', mf_auc)
       
       l2_norm = tf.add_n([
               regulation_rate * tf.reduce_sum(tf.multiply(u_emb, u_emb)),
