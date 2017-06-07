@@ -141,3 +141,5 @@ class VBPR(Model):
         for d, _iv, _jv in self.sampler.generate_train_batch(user_items, val_ratings, test_ratings, item_count, image_features, sample_count=sample_count, batch_size=batch_size ):
             _loss, _ = self.session.run([loss, train_op], feed_dict={ u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
             train_loss_vals.append(_loss)
+            
+            
