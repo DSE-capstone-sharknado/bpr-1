@@ -31,10 +31,6 @@ def main(_):
   session.close()
 
 def evaluate(model):
-  #get initial loss
-  val_auc, val_loss = model.evaluate(model.val_ratings,  sample_size=1000)
-  print "initial val loss: %.2f, val auc: %.2f"%(val_loss, val_auc )
-  
   #start training loop
   epoch_durations = []
   best_auc=-1
@@ -68,7 +64,7 @@ def evaluate(model):
   #test auc
   test_auc, test_loss = model.evaluate(model.test_ratings, sample_size=1000)
   print "Best model iteration %d, test: %.3f, val: %.3f"%(best_iter, test_auc, best_auc)
-
+  
   
   #cold auc
   cold_auc, cold_loss = model.evaluate(model.test_ratings, sample_size=1000, cold_start=True)
@@ -79,7 +75,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--model',
       type=str,
-      default="BPR",
+      default="VBPR",
       help='Which model to evaluate?: bpr, vbpr or hbpr'
   )
   parser.add_argument(

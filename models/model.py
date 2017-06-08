@@ -31,6 +31,7 @@ class Model(object):
           user_val[u] = samples[1]
       return user_val, user_test
       
+  #TODO save this model to path and return path
   def save(self):
     self.saver.save(self.session, "logs/")
   

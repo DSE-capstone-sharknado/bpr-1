@@ -18,14 +18,14 @@ class VBPR(Model):
     
     self.sampler = sampler
     
-    self.u, self.i, self.j, self.iv, self.jv, self.loss, self.auc, self.train_op = VBPR.vbpr(corpus.user_count, corpus.item_count, hidden_dim=k, hidden_img_dim=k2, l2_regulization =factor_reg, bias_regulization=bias_reg)
+    self.u, self.i, self.j, self.iv, self.jv, self.loss, self.auc, self.train_op = VBPR.vbpr(corpus.user_count, corpus.item_count, len(corpus.image_features[1]),  hidden_dim=k, hidden_img_dim=k2, l2_regulization =factor_reg, bias_regulization=bias_reg)
     
     Model.__init__(self, corpus, session)
     
     print "VBPR - K=%d, K2=%d, reg_lf=%.2f, reg_bias=%.2f"%(k, k2, factor_reg, bias_reg)
   
   @classmethod
-  def vbpr(cls, user_count, item_count, hidden_dim=20, hidden_img_dim=128,
+  def vbpr(cls, user_count, item_count, image_feat_dim, hidden_dim=20, hidden_img_dim=128,
            learning_rate=0.001,
             l2_regulization=0.001,
             bias_regulization=0.001,
@@ -38,11 +38,13 @@ class VBPR(Model):
       hidden_dim: hidden feature size of MF
       hidden_img_dim: [4096, hidden_img_dim]
       """
+            
+      
       u = tf.placeholder(tf.int32, [None])
       i = tf.placeholder(tf.int32, [None])
       j = tf.placeholder(tf.int32, [None])
-      iv = tf.placeholder(tf.float32, [None, 4096])
-      jv = tf.placeholder(tf.float32, [None, 4096])
+      iv = tf.placeholder(tf.float32, [None, image_feat_dim])
+      jv = tf.placeholder(tf.float32, [None, image_feat_dim])
       
       user_emb_w = tf.get_variable("user_emb_w", [user_count+1, hidden_dim],
                                   initializer=tf.random_normal_initializer(0, 0.1))
@@ -52,9 +54,9 @@ class VBPR(Model):
                                   initializer=tf.random_normal_initializer(0, 0.1))
       item_b = tf.get_variable("item_b", [item_count+1, 1],
                                   initializer=tf.constant_initializer(0.0))
-      visual_bias = tf.get_variable("visual_bias", [1, 4096], initializer=tf.constant_initializer(0.0))
+      visual_bias = tf.get_variable("visual_bias", [1, image_feat_dim], initializer=tf.constant_initializer(0.0))
       
-      img_emb_w = tf.get_variable("image_embedding_weights", [4096, hidden_img_dim],
+      img_emb_w = tf.get_variable("image_embedding_weights", [image_feat_dim, hidden_img_dim],
                                  initializer=tf.random_normal_initializer(0, 0.1))
     
     
@@ -122,21 +124,13 @@ class VBPR(Model):
     image_features = self.corpus.image_features
     item_dist = self.corpus.item_dist
     
-    sample_count = batch_count
-    
     val_ratings = self.val_ratings
     test_ratings = self.test_ratings
     
-    K=self.K
-    K2=self.K2
-    lam=self.lam
-    bias_reg=self.bias_reg
-      
-    
-    for epoch in range(1, max_iterations):
+    for epoch in range(1, max_iterations+1):
         epoch_start = time.time()
         train_loss_vals=[]
-        for d, _iv, _jv in self.sampler.generate_train_batch(user_items, val_ratings, test_ratings, item_count, image_features, sample_count=sample_count, batch_size=batch_size ):
+        for d, _iv, _jv in self.sampler.generate_train_batch(user_items, val_ratings, test_ratings, item_count, image_features, sample_count=batch_count, batch_size=batch_size ):
             _loss, _ = self.session.run([loss, train_op], feed_dict={ u:d[:,0], i:d[:,1], j:d[:,2], iv:_iv, jv:_jv})
             train_loss_vals.append(_loss)
             
