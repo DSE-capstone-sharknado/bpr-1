@@ -108,7 +108,7 @@ class BPR(Model):
       
       loss_vals=[]
       auc_vals=[]
-      for uij in self.sampler.generate_user_eval_batch(self.corpus.user_items, eval_set, self.corpus.item_count, self.corpus.item_dist, None, sample_size=sample_size, cold_start=cold_start):
+      for uij in self.generate_user_eval_batch(self.corpus.user_items, eval_set, self.corpus.item_count, self.corpus.item_dist, None, sample_size=sample_size, cold_start=cold_start):
           _loss, user_auc = self.session.run([loss, auc], feed_dict={u: uij[:,0], i: uij[:,1], j: uij[:,2]})
           loss_vals.append(_loss)
           auc_vals.append(user_auc)
