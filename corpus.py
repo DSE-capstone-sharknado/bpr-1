@@ -31,9 +31,11 @@ class Corpus(object):
   
   @staticmethod
   def load_complex(path, user_min=5):
+    print "load_complex"
     #load raw from disk
     reviews=[]
     with open(path, 'r') as f:
+      next(f)
       csvreader = csv.reader(f)
       for auid, asin, _, brand, price in csvreader:
         reviews.append([auid,asin, brand, price])
